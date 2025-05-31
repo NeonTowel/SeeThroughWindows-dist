@@ -25,9 +25,12 @@ This method automatically handles:
 
 ### Option 2: Direct Download
 
-Releases can also be downloaded directly from https://www.mobzystems.com/Tools/SeeThroughWindows
+Releases can also be downloaded directly from the [GitHub Releases page](https://github.com/NeonTowel/SeeThroughWindows-dist/releases/latest).
 
-The current release is 1.0.9, which runs standalone on .NET 9.0, so downloading .NET is no longer necessary.
+The current release is [v1.0.9](https://github.com/NeonTowel/SeeThroughWindows-dist/releases/tag/v1.0.9), which includes both:
+
+- **Framework-dependent**: Requires .NET 9 runtime to be installed
+- **Self-contained**: Includes .NET 9 runtime (larger file size)
 
 ## Features
 
