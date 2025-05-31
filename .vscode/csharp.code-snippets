@@ -1,0 +1,69 @@
+{
+  "Win32 DllImport": {
+    "prefix": "dllimport",
+    "body": [
+      "[DllImport(\"$1.dll\")]",
+      "private static extern $2 $3($4);"
+    ],
+    "description": "Create a Win32 DLL import declaration"
+  },
+
+  "Event Handler Method": {
+    "prefix": "eventhandler",
+    "body": [
+      "private void ${1:MethodName}(object sender, ${2:EventArgs} e)",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create an event handler method"
+  },
+
+  "Try-Catch Block": {
+    "prefix": "trywin32",
+    "body": [
+      "try",
+      "{",
+      "\t$1",
+      "}",
+      "catch (Win32Exception ex)",
+      "{",
+      "\t// Handle Win32 error",
+      "\t$0",
+      "}"
+    ],
+    "description": "Try-catch block for Win32 operations"
+  },
+
+  "Registry Access": {
+    "prefix": "registry",
+    "body": [
+      "using (var key = Registry.${1:CurrentUser}.OpenSubKey(\"${2:KeyPath}\"))",
+      "{",
+      "\tif (key != null)",
+      "\t{",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Safe registry access pattern"
+  },
+
+  "Hotkey Registration": {
+    "prefix": "hotkey",
+    "body": [
+      "private Hotkey ${1:hotkeyName} = new Hotkey(Keys.${2:F1}, ${3:false}, ${4:true}, ${5:false}, ${6:false});",
+      "",
+      "// In constructor:",
+      "this.${1:hotkeyName}.Pressed += ${1:hotkeyName}_Pressed;",
+      "this.${1:hotkeyName}.Register(this);",
+      "",
+      "private void ${1:hotkeyName}_Pressed(object sender, HandledEventArgs e)",
+      "{",
+      "\t$0",
+      "\te.Handled = true;",
+      "}"
+    ],
+    "description": "Complete hotkey registration pattern"
+  }
+}

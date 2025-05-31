@@ -1,0 +1,9 @@
+{
+  "sdk": {
+    "version": "8.0.0",
+    "rollForward": "latestMinor"
+  },
+  "msbuild-sdks": {
+    "Microsoft.NET.Sdk": "8.0.0"
+  }
+}
