@@ -10,8 +10,8 @@
     <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
-    <Version>1.0.8</Version>
-    <AssemblyVersion>1.0.8.0</AssemblyVersion>
+    <Version>1.0.9</Version>
+    <AssemblyVersion>1.0.9.0</AssemblyVersion>
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <Company>MOBZystems</Company>
     <Copyright>Copyright © 2008-2024, MOBZystems BV, Amsterdam</Copyright>

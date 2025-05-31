@@ -61,7 +61,6 @@ jobs:
         dotnet publish ${{ env.PROJECT_PATH }} `
           --configuration ${{ env.BUILD_CONFIGURATION }} `
           --output "publish/framework-dependent" `
-          --no-build `
           --self-contained false `
           --verbosity normal
 
@@ -70,7 +69,6 @@ jobs:
         dotnet publish ${{ env.PROJECT_PATH }} `
           --configuration ${{ env.BUILD_CONFIGURATION }} `
           --output "publish/self-contained" `
-          --no-build `
           --self-contained true `
           --runtime win-x64 `
           --verbosity normal
