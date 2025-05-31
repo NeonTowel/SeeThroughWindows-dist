@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.8)'
+        required: true
+        default: '1.0.8'
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  PROJECT_PATH: 'SeeThroughWindows/SeeThroughWindows.csproj'
+  SOLUTION_PATH: 'SeeThroughWindows.sln'
+  BUILD_CONFIGURATION: 'Release'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Get version
+      id: get-version
+      shell: pwsh
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          $version = "${{ github.event.inputs.version }}"
+        } else {
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "tag=v$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+
+    - name: Run tests
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --verbosity normal
+      continue-on-error: true
+
+    - name: Publish application (Framework-dependent)
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration ${{ env.BUILD_CONFIGURATION }} `
+          --output "publish/framework-dependent" `
+          --no-build `
+          --self-contained false `
+          --verbosity normal
+
+    - name: Publish application (Self-contained)
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration ${{ env.BUILD_CONFIGURATION }} `
+          --output "publish/self-contained" `
+          --no-build `
+          --self-contained true `
+          --runtime win-x64 `
+          --verbosity normal
+
+    - name: Create release packages
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get-version.outputs.version }}"
+
+        # Create framework-dependent package
+        $fdDir = "SeeThroughWindows-v$version-framework-dependent"
+        New-Item -ItemType Directory -Path $fdDir -Force
+        Copy-Item -Path "publish/framework-dependent/*" -Destination $fdDir -Recurse -Force
+        if (Test-Path "README.md") { Copy-Item "README.md" $fdDir }
+        if (Test-Path "LICENSE") { Copy-Item "LICENSE" $fdDir }
+        Compress-Archive -Path $fdDir -DestinationPath "$fdDir.zip" -Force
+
+        # Create self-contained package
+        $scDir = "SeeThroughWindows-v$version-self-contained-win-x64"
+        New-Item -ItemType Directory -Path $scDir -Force
+        Copy-Item -Path "publish/self-contained/*" -Destination $scDir -Recurse -Force
+        if (Test-Path "README.md") { Copy-Item "README.md" $scDir }
+        if (Test-Path "LICENSE") { Copy-Item "LICENSE" $scDir }
+        Compress-Archive -Path $scDir -DestinationPath "$scDir.zip" -Force
+
+        # Output package info
+        echo "fd-package=$fdDir.zip" >> $env:GITHUB_OUTPUT
+        echo "sc-package=$scDir.zip" >> $env:GITHUB_OUTPUT
+
+        echo "Created packages:"
+        Get-Item "*.zip" | ForEach-Object {
+          echo "- $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+        }
+      id: create-packages
+
+    - name: Generate changelog
+      id: changelog
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get-version.outputs.version }}"
+
+        # Try to get commits since last tag
+        $lastTag = git describe --tags --abbrev=0 HEAD^ 2>$null
+        if ($lastTag) {
+          $commits = git log --pretty=format:"- %s (%h)" "$lastTag..HEAD"
+        } else {
+          $commits = git log --pretty=format:"- %s (%h)" -10
+        }
+
+        $changelog = @"
+        ## What's Changed
+
+        $commits
+
+        ## Downloads
+
+        - **Framework-dependent**: Requires .NET 9 runtime to be installed
+        - **Self-contained**: Includes .NET 9 runtime (larger file size)
+
+        **Full Changelog**: https://github.com/${{ github.repository }}/compare/$lastTag...${{ steps.get-version.outputs.tag }}
+        "@
+
+        # Save changelog to file and output
+        $changelog | Out-File -FilePath "changelog.md" -Encoding UTF8
+        echo "changelog<<EOF" >> $env:GITHUB_OUTPUT
+        echo $changelog >> $env:GITHUB_OUTPUT
+        echo "EOF" >> $env:GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get-version.outputs.tag }}
+        name: SeeThroughWindows v${{ steps.get-version.outputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: false
+        files: |
+          ${{ steps.create-packages.outputs.fd-package }}
+          ${{ steps.create-packages.outputs.sc-package }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

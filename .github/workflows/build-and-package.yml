@@ -1,0 +1,155 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  PROJECT_PATH: 'SeeThroughWindows/SeeThroughWindows.csproj'
+  SOLUTION_PATH: 'SeeThroughWindows.sln'
+  BUILD_CONFIGURATION: 'Release'
+  OUTPUT_DIRECTORY: 'publish'
+
+jobs:
+  build-and-package:
+    name: Build and Package Application
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for versioning
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Display .NET version
+      run: dotnet --version
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+
+    - name: Run tests (if any exist)
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --verbosity normal
+      continue-on-error: true  # Continue even if no tests exist
+
+    - name: Publish application
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration ${{ env.BUILD_CONFIGURATION }} `
+          --output ${{ env.OUTPUT_DIRECTORY }} `
+          --no-build `
+          --self-contained false `
+          --verbosity normal
+
+    - name: Get version from project file
+      id: get-version
+      shell: pwsh
+      run: |
+        [xml]$proj = Get-Content ${{ env.PROJECT_PATH }}
+        $version = $proj.Project.PropertyGroup.Version
+        if ([string]::IsNullOrEmpty($version)) {
+          $version = $proj.Project.PropertyGroup.AssemblyVersion
+        }
+        if ([string]::IsNullOrEmpty($version)) {
+          $version = "1.0.0"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+
+    - name: Create package directory
+      shell: pwsh
+      run: |
+        $packageDir = "SeeThroughWindows-v${{ steps.get-version.outputs.version }}"
+        New-Item -ItemType Directory -Path $packageDir -Force
+
+        # Copy published files
+        Copy-Item -Path "${{ env.OUTPUT_DIRECTORY }}/*" -Destination $packageDir -Recurse -Force
+
+        # Copy additional files if they exist
+        if (Test-Path "README.md") {
+          Copy-Item "README.md" $packageDir
+        }
+        if (Test-Path "LICENSE") {
+          Copy-Item "LICENSE" $packageDir
+        }
+
+        echo "package-dir=$packageDir" >> $env:GITHUB_OUTPUT
+      id: create-package
+
+    - name: Create ZIP package
+      shell: pwsh
+      run: |
+        $packageDir = "${{ steps.create-package.outputs.package-dir }}"
+        $zipName = "$packageDir.zip"
+        Compress-Archive -Path $packageDir -DestinationPath $zipName -Force
+        echo "zip-name=$zipName" >> $env:GITHUB_OUTPUT
+        echo "zip-path=$(Resolve-Path $zipName)" >> $env:GITHUB_OUTPUT
+
+        # Display package contents
+        echo "Package contents:"
+        Get-ChildItem $packageDir -Recurse | Select-Object Name, Length, LastWriteTime
+
+        # Display ZIP info
+        echo "ZIP file created: $zipName"
+        echo "ZIP file size: $((Get-Item $zipName).Length) bytes"
+      id: create-zip
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SeeThroughWindows-v${{ steps.get-version.outputs.version }}
+        path: ${{ steps.create-zip.outputs.zip-name }}
+        retention-days: 30
+
+    - name: Upload to release (if release event)
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ${{ steps.create-zip.outputs.zip-path }}
+        asset_name: ${{ steps.create-zip.outputs.zip-name }}
+        asset_content_type: application/zip
+
+  # Optional: Create a matrix build for different configurations
+  build-matrix:
+    name: Build Matrix
+    runs-on: windows-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build solution (${{ matrix.configuration }})
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ matrix.configuration }} --no-restore
+
+    - name: Test solution (${{ matrix.configuration }})
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration ${{ matrix.configuration }} --no-build --verbosity normal
+      continue-on-error: true

@@ -1,0 +1,38 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  SOLUTION_PATH: 'SeeThroughWindows.sln'
+
+jobs:
+  build:
+    name: Quick Build
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Display .NET version
+      run: dotnet --version
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build solution (Debug)
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration Debug --no-restore
+
+    - name: Run tests (if any exist)
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration Debug --no-build --verbosity normal
+      continue-on-error: true
