@@ -7,9 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.8)'
+        description: 'Version to release (e.g., 1.0.9)'
         required: true
-        default: '1.0.8'
+        default: '1.0.9'
+
+permissions:
+  contents: write
 
 env:
   DOTNET_VERSION: '9.0.x'
