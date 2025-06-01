@@ -8,22 +8,32 @@ static class Program
   [STAThread]
   static void Main()
   {
-    // Make sure we have a single instance of this application running:
-    bool ok;
-    Mutex m = new Mutex(true, "MOBZystems.SeeThroughWindows", out ok);
-
-    if (!ok)
+    try
     {
-      MessageBox.Show(null, "See Through Windows is already active in the system tray!", "See Through Windows", MessageBoxButtons.OK, MessageBoxIcon.Information);
+      // Make sure we have a single instance of this application running:
+      bool ok;
+      Mutex m = new Mutex(true, "MOBZystems.SeeThroughWindows", out ok);
 
-      // Exit immediately
-      return;
+      if (!ok)
+      {
+        MessageBox.Show(null, "See Through Windows is already active in the system tray!", "See Through Windows", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        // Exit immediately
+        return;
+      }
+      // To customize application configuration such as set high DPI settings or default font,
+      // see https://aka.ms/applicationconfiguration.
+      ApplicationConfiguration.Initialize();
+      Application.Run(new SeeThrougWindowsForm());
+
+      GC.KeepAlive(m); // important!
     }
-    // To customize application configuration such as set high DPI settings or default font,
-    // see https://aka.ms/applicationconfiguration.
-    ApplicationConfiguration.Initialize();
-    Application.Run(new SeeThrougWindowsForm());
-
-    GC.KeepAlive(m); // important!
+    catch (Exception ex)
+    {
+      MessageBox.Show($"Application failed to start:\n\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}",
+                      "SeeThroughWindows Error",
+                      MessageBoxButtons.OK,
+                      MessageBoxIcon.Error);
+    }
   }
 }

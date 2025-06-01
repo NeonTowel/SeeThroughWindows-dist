@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using SeeThroughWindows.Core;
+using SeeThroughWindows.Themes;
 
 namespace SeeThroughWindows
 {
@@ -217,110 +218,151 @@ namespace SeeThroughWindows
     /// </summary>
     public SeeThrougWindowsForm()
     {
+      // Set loading flag to prevent event handlers from firing during initialization
       this.loading = true;
 
       InitializeComponent();
 
-      Version version = new Version(Application.ProductVersion);
-      this.helpLink.Text = this.helpLink.Text
-        .Replace("#V#", string.Format("{0}.{1}.{2}", version.Major, version.Minor, version.Build))
-        .Replace("#3264#", (IntPtr.Size * 8).ToString());
+      // Set the version text dynamically
+      var version = Application.ProductVersion;
+      var bitness = Environment.Is64BitProcess ? "64-bit" : "32-bit";
+      helpLink.Text = $"See Through Windows ({bitness}) v{version} by MOBZystems";
 
-      // Use same icon for notify icon as for this form
-      this.notifyIcon.Icon = this.Icon;
+      // Initialize theme manager and load saved theme settings
+      ThemeManager.Initialize();
 
-      // Read our settings from the registry:
-      RegistryKey root = Registry.CurrentUser.CreateSubKey(REGROOT);
+      // Apply theme
+      ThemeManager.ApplyTheme(this);
+      ThemeManager.ThemeChanged += OnThemeChanged;
 
-      // First transparency:
-      this.semiTransparentValue = short.Parse((string)root.GetValue("Transparency", DEFAULT_SEMITRANSPARENT.ToString()));
-      if (this.semiTransparentValue < this.transparencyTrackBar.Minimum)
-        this.semiTransparentValue = (short)this.transparencyTrackBar.Minimum;
-      if (this.semiTransparentValue > this.transparencyTrackBar.Maximum)
-        this.semiTransparentValue = (short)this.transparencyTrackBar.Maximum;
+      // Set up custom status bar layout
+      SetupStatusBarLayout();
 
-      // Click-through-ness:
-      this.clickThroughCheckBox.Checked = BoolFromString((string)root.GetValue("ClickThrough", "0"));
-      this.topMostCheckBox.Checked = BoolFromString((string)root.GetValue("TopMost", "1"));
+      // Populate combo boxes
+      PopulateThemeComboBox();
+      PopulateAccentColorComboBox();
 
-      // Then the hot key:
-      string hotkeyString = (string)root.GetValue("Hotkey", "Z");
-      bool shiftKey = BoolFromString((string)root.GetValue("Shift", "1"));
-      bool controlKey = BoolFromString((string)root.GetValue("Control", "1"));
-      bool altKey = BoolFromString((string)root.GetValue("Alt", "0"));
-      bool windowsKey = BoolFromString((string)root.GetValue("Windows", "0"));
+      // Set up the icon
+      notifyIcon.Icon = this.Icon;
 
-      this.sendToMonitorEnabledCheckBox.Checked = BoolFromString((string)root.GetValue("EnableLeftRight", "0"));
-      this.minMaxEnabledCheckBox.Checked = BoolFromString((string)root.GetValue("EnableUpDown", "0"));
-      this.enableChangeTransparencyCheckbox.Checked = BoolFromString((string)root.GetValue("EnablePageUpDown", "1"));
+      // Initialize the user hotkey with default values before using it
+      this.userHotkey = new Hotkey(Keys.Z, false, false, false, false);
+      this.userHotkey.Pressed += UserHotkey_Pressed;
 
-      // Create a hot key with the settings:
-      this.userHotkey = new Hotkey(Hotkey.KeyCodeFromString(hotkeyString), shiftKey, controlKey, altKey, windowsKey);
-      // Catch the 'Pressed' event
-      this.userHotkey.Pressed += new HandledEventHandler(UserHotkey_Pressed);
-      this.userHotkey.Register(this);
+      // Set up the hotkeys
+      maximizeHotkey.Pressed += MaximizeHotkey_Pressed;
+      minimizeHotkey.Pressed += MinimizeHotkey_Pressed;
+      previousScreenHotkey.Pressed += PreviousScreenHotkey_Pressed;
+      nextScreenHotkey.Pressed += NextScreenHotkey_Pressed;
+      moreTransparentHotkey.Pressed += MoreTransparentHotkey_Pressed;
+      lessTransparentHotkey.Pressed += LessTransparentHotkey_Pressed;
 
-      this.minimizeHotkey.Pressed += new HandledEventHandler(MinimizeHotkey_Pressed);
-      if (this.minMaxEnabledCheckBox.Checked)
-        this.minimizeHotkey.Register(this);
-
-      this.maximizeHotkey.Pressed += new HandledEventHandler(MaximizeHotkey_Pressed);
-      if (this.minMaxEnabledCheckBox.Checked)
-        this.maximizeHotkey.Register(this);
-
-      this.previousScreenHotkey.Pressed += new HandledEventHandler(PreviousScreenHotkey_Pressed);
-      if (this.sendToMonitorEnabledCheckBox.Checked)
-        this.previousScreenHotkey.Register(this);
-
-      this.nextScreenHotkey.Pressed += new HandledEventHandler(NextScreenHotkey_Pressed);
-      if (this.sendToMonitorEnabledCheckBox.Checked)
-        this.nextScreenHotkey.Register(this);
-
-      this.moreTransparentHotkey.Pressed += new HandledEventHandler(MoreTransparentHotkey_Pressed);
-      if (this.enableChangeTransparencyCheckbox.Checked)
-        this.moreTransparentHotkey.Register(this);
-
-      this.lessTransparentHotkey.Pressed += new HandledEventHandler(LessTransparentHotkey_Pressed);
-      if (this.enableChangeTransparencyCheckbox.Checked)
-        this.lessTransparentHotkey.Register(this);
-
-      // Set up our form:
+      // Populate the hotkey combo box
       for (Keys k = Keys.A; k <= Keys.Z; k++)
       {
         AddKeyToComboBox(k);
       }
-      for (Keys k = Keys.F1; k <= Keys.F24; k++)
+      for (Keys k = Keys.F1; k <= Keys.F12; k++)
+      {
+        AddKeyToComboBox(k);
+      }
+      for (Keys k = Keys.D0; k <= Keys.D9; k++)
+      {
+        AddKeyToComboBox(k);
+      }
+      for (Keys k = Keys.NumPad0; k <= Keys.NumPad9; k++)
       {
         AddKeyToComboBox(k);
       }
 
-      //AddKeyToComboBox(Keys.Up);
-      //AddKeyToComboBox(Keys.Down);
-      //AddKeyToComboBox(Keys.Left);
-      //AddKeyToComboBox(Keys.Right);
-      //AddKeyToComboBox(Keys.Home);
-      //AddKeyToComboBox(Keys.End);
-      //AddKeyToComboBox(Keys.PageDown);
-      //AddKeyToComboBox(Keys.PageUp);
+      // Set the default value
+      hotKeyComboBox.SelectedItem = Keys.Z;
 
-      // Update the form now controls
-      this.shiftCheckBox.Checked = this.userHotkey.Shift;
-      this.controlCheckBox.Checked = this.userHotkey.Control;
-      this.altCheckBox.Checked = this.userHotkey.Alt;
-      this.windowsCheckBox.Checked = this.userHotkey.Windows;
+      // Set the default transparency value
+      transparencyTrackBar.Value = DEFAULT_SEMITRANSPARENT;
 
-      this.transparencyTrackBar.Value = this.semiTransparentValue;
+      // Load settings from registry
+      LoadSettings();
 
-      UpdateUI();
-
-      // Done loading
+      // Clear loading flag
       this.loading = false;
+
+      // Update the UI
+      UpdateUI();
+    }
+
+    /// <summary>
+    /// Set up custom layout for the status bar to center icon and text
+    /// </summary>
+    private void SetupStatusBarLayout()
+    {
+      // Remove docking from status bar elements to allow custom positioning
+      helpLink.Dock = DockStyle.None;
+      updateAvailableLink.Dock = DockStyle.None;
+
+      // Handle layout events to maintain centering
+      panel1.Layout += Panel1_Layout;
+      panel1.Resize += Panel1_Resize;
+    }
+
+    /// <summary>
+    /// Custom layout handler for status bar centering
+    /// </summary>
+    private void Panel1_Layout(object? sender, LayoutEventArgs e)
+    {
+      CenterStatusBarContent();
+    }
+
+    /// <summary>
+    /// Handle resize events to maintain centering
+    /// </summary>
+    private void Panel1_Resize(object? sender, EventArgs e)
+    {
+      CenterStatusBarContent();
+    }
+
+    /// <summary>
+    /// Center the icon and text in the status bar
+    /// </summary>
+    private void CenterStatusBarContent()
+    {
+      if (panel1 == null || pictureBox1 == null || helpLink == null) return;
+
+      // Calculate total content width (icon + spacing + text)
+      var iconWidth = pictureBox1.Width;
+      var textWidth = helpLink.Width;
+      var spacing = 8; // Space between icon and text
+      var totalContentWidth = iconWidth + spacing + textWidth;
+
+      // Calculate starting position to center the content
+      var startX = (panel1.ClientSize.Width - totalContentWidth) / 2;
+
+      // Position the icon
+      pictureBox1.Location = new Point(
+          Math.Max(panel1.Padding.Left, startX),
+          (panel1.ClientSize.Height - pictureBox1.Height) / 2
+      );
+
+      // Position the text next to the icon
+      helpLink.Location = new Point(
+          pictureBox1.Right + spacing,
+          (panel1.ClientSize.Height - helpLink.Height) / 2
+      );
+
+      // Position update link (if visible) to the right of the main text
+      if (updateAvailableLink.Visible)
+      {
+        updateAvailableLink.Location = new Point(
+            helpLink.Right + spacing,
+            (panel1.ClientSize.Height - updateAvailableLink.Height) / 2
+        );
+      }
     }
 
     protected void AddKeyToComboBox(Keys k)
     {
       int index = this.hotKeyComboBox.Items.Add(k);
-      if (k == this.userHotkey.KeyCode)
+      if (this.userHotkey != null && k == this.userHotkey.KeyCode)
         this.hotKeyComboBox.SelectedItem = k;
     }
 
@@ -354,6 +396,10 @@ namespace SeeThroughWindows
     {
       base.OnLoad(e);
 
+      // Apply the current theme
+      ThemeManager.ApplyTheme(this);
+
+      // Check for updates
       try
       {
         var client = new HttpClient();
@@ -418,7 +464,7 @@ namespace SeeThroughWindows
       RestoreAllWindows();
 
       // Unregister the hotkey:
-      if (this.userHotkey.IsRegistered)
+      if (this.userHotkey != null && this.userHotkey.IsRegistered)
         this.userHotkey.Unregister();
     }
     #endregion
@@ -873,7 +919,10 @@ namespace SeeThroughWindows
       if (this.loading)
         return;
 
-      this.userHotkey.Reregister((Keys)hotKeyComboBox.SelectedItem, shiftCheckBox.Checked, controlCheckBox.Checked, altCheckBox.Checked, windowsCheckBox.Checked);
+      if (this.userHotkey != null)
+        this.userHotkey.Reregister((Keys)hotKeyComboBox.SelectedItem, shiftCheckBox.Checked, controlCheckBox.Checked, altCheckBox.Checked, windowsCheckBox.Checked);
+
+      SaveSettings();
     }
     /// <summary>
     /// Restore the window style based on the original style
@@ -896,6 +945,10 @@ namespace SeeThroughWindows
     private void UpdateTransparency()
     {
       this.semiTransparentValue = (short)transparencyTrackBar.Value;
+
+      // Update the transparency value label
+      int percentage = (int)Math.Round((double)this.semiTransparentValue / 255.0 * 100.0);
+      transparencyValueLabel.Text = $"{percentage}%";
     }
 
     /// <summary>
@@ -942,6 +995,101 @@ namespace SeeThroughWindows
       root.SetValue("EnableLeftRight", BoolToString(this.sendToMonitorEnabledCheckBox.Checked));
       root.SetValue("EnableUpDown", BoolToString(this.minMaxEnabledCheckBox.Checked));
       root.SetValue("EnablePageUpDown", BoolToString(this.enableChangeTransparencyCheckbox.Checked));
+
+      root.Close();
+    }
+
+    /// <summary>
+    /// Load the settings from the registry
+    /// </summary>
+    private void LoadSettings()
+    {
+      try
+      {
+        RegistryKey root = Registry.CurrentUser.OpenSubKey(REGROOT);
+        if (root == null)
+        {
+          // No settings found, use defaults
+          SetDefaultSettings();
+          return;
+        }
+
+        // Load transparency
+        string transparencyStr = root.GetValue("Transparency", DEFAULT_SEMITRANSPARENT.ToString()).ToString();
+        if (short.TryParse(transparencyStr, out short transparency))
+        {
+          this.semiTransparentValue = transparency;
+          transparencyTrackBar.Value = transparency;
+        }
+
+        // Load checkboxes
+        this.clickThroughCheckBox.Checked = BoolFromString(root.GetValue("ClickThrough", "0").ToString());
+        this.topMostCheckBox.Checked = BoolFromString(root.GetValue("TopMost", "0").ToString());
+
+        // Load hotkey settings
+        string hotkeyStr = root.GetValue("Hotkey", "Z").ToString();
+        Keys hotkey = Hotkey.KeyCodeFromString(hotkeyStr);
+        bool shift = BoolFromString(root.GetValue("Shift", "1").ToString());
+        bool control = BoolFromString(root.GetValue("Control", "1").ToString());
+        bool alt = BoolFromString(root.GetValue("Alt", "1").ToString());
+        bool windows = BoolFromString(root.GetValue("Windows", "0").ToString());
+
+        // Update hotkey checkboxes
+        this.shiftCheckBox.Checked = shift;
+        this.controlCheckBox.Checked = control;
+        this.altCheckBox.Checked = alt;
+        this.windowsCheckBox.Checked = windows;
+
+        // Update hotkey combo box
+        this.hotKeyComboBox.SelectedItem = hotkey;
+
+        // Update the hotkey object
+        this.userHotkey.Reregister(hotkey, shift, control, alt, windows);
+
+        // Load feature enable checkboxes
+        this.sendToMonitorEnabledCheckBox.Checked = BoolFromString(root.GetValue("EnableLeftRight", "1").ToString());
+        this.minMaxEnabledCheckBox.Checked = BoolFromString(root.GetValue("EnableUpDown", "1").ToString());
+        this.enableChangeTransparencyCheckbox.Checked = BoolFromString(root.GetValue("EnablePageUpDown", "1").ToString());
+
+        // Update transparency label
+        UpdateTransparency();
+
+        root.Close();
+      }
+      catch
+      {
+        // If there's any error loading settings, use defaults
+        SetDefaultSettings();
+      }
+    }
+
+    /// <summary>
+    /// Set default settings when no registry settings are found
+    /// </summary>
+    private void SetDefaultSettings()
+    {
+      // Set default hotkey: Shift+Control+Alt+Z
+      this.shiftCheckBox.Checked = true;
+      this.controlCheckBox.Checked = true;
+      this.altCheckBox.Checked = true;
+      this.windowsCheckBox.Checked = false;
+      this.hotKeyComboBox.SelectedItem = Keys.Z;
+
+      // Set default feature enables
+      this.sendToMonitorEnabledCheckBox.Checked = true;
+      this.minMaxEnabledCheckBox.Checked = true;
+      this.enableChangeTransparencyCheckbox.Checked = true;
+
+      // Set default transparency
+      this.semiTransparentValue = DEFAULT_SEMITRANSPARENT;
+      this.transparencyTrackBar.Value = DEFAULT_SEMITRANSPARENT;
+
+      // Set default checkboxes
+      this.clickThroughCheckBox.Checked = false;
+      this.topMostCheckBox.Checked = false;
+
+      // Update transparency label
+      UpdateTransparency();
     }
     #endregion
 
@@ -958,6 +1106,8 @@ namespace SeeThroughWindows
 
       if (previewCheckBox.Checked)
         ApplyTransparency();
+
+      SaveSettings();
     }
 
     /// <summary>
@@ -1027,6 +1177,8 @@ namespace SeeThroughWindows
 
       RegisterHotkey(this.minimizeHotkey, minMaxEnabledCheckBox.Checked);
       RegisterHotkey(this.maximizeHotkey, minMaxEnabledCheckBox.Checked);
+
+      SaveSettings();
     }
 
     /// <summary>
@@ -1039,6 +1191,8 @@ namespace SeeThroughWindows
 
       RegisterHotkey(this.previousScreenHotkey, this.sendToMonitorEnabledCheckBox.Checked);
       RegisterHotkey(this.nextScreenHotkey, this.sendToMonitorEnabledCheckBox.Checked);
+
+      SaveSettings();
     }
 
     /// <summary>
@@ -1051,6 +1205,8 @@ namespace SeeThroughWindows
 
       RegisterHotkey(this.moreTransparentHotkey, enableChangeTransparencyCheckbox.Checked);
       RegisterHotkey(this.lessTransparentHotkey, enableChangeTransparencyCheckbox.Checked);
+
+      SaveSettings();
     }
 
     /// <summary>
@@ -1058,7 +1214,20 @@ namespace SeeThroughWindows
     /// </summary>
     private void clickThroughCheckBox_CheckedChanged(object sender, EventArgs e)
     {
-      topMostCheckBox.Enabled = clickThroughCheckBox.Checked;
+      this.topMostCheckBox.Enabled = this.clickThroughCheckBox.Checked;
+
+      SaveSettings();
+    }
+
+    /// <summary>
+    /// Save settings when topmost checkbox changes
+    /// </summary>
+    private void topMostCheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+      if (this.loading)
+        return;
+
+      SaveSettings();
     }
 
     private void restoreAllButton_Click(object sender, EventArgs e)
@@ -1099,5 +1268,114 @@ namespace SeeThroughWindows
         return true;
     }
     #endregion
+
+    private void PopulateThemeComboBox()
+    {
+      themeComboBox.Items.Clear();
+
+      foreach (CatppuccinTheme.Flavor flavor in Enum.GetValues<CatppuccinTheme.Flavor>())
+      {
+        themeComboBox.Items.Add(new ThemeComboBoxItem(flavor));
+      }
+
+      // Set current selection
+      for (int i = 0; i < themeComboBox.Items.Count; i++)
+      {
+        if (themeComboBox.Items[i] is ThemeComboBoxItem item && item.Flavor == ThemeManager.CurrentFlavor)
+        {
+          themeComboBox.SelectedIndex = i;
+          break;
+        }
+      }
+    }
+
+    private void PopulateAccentColorComboBox()
+    {
+      accentColorComboBox.Items.Clear();
+
+      foreach (CatppuccinTheme.AccentColor accentColor in Enum.GetValues<CatppuccinTheme.AccentColor>())
+      {
+        accentColorComboBox.Items.Add(new AccentColorComboBoxItem(accentColor));
+      }
+
+      // Set current selection
+      for (int i = 0; i < accentColorComboBox.Items.Count; i++)
+      {
+        if (accentColorComboBox.Items[i] is AccentColorComboBoxItem item && item.AccentColor == ThemeManager.CurrentAccentColor)
+        {
+          accentColorComboBox.SelectedIndex = i;
+          break;
+        }
+      }
+    }
+
+    private void themeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+    {
+      if (loading) return;
+
+      if (themeComboBox.SelectedItem is ThemeComboBoxItem selectedItem)
+      {
+        ThemeManager.SetTheme(selectedItem.Flavor, ThemeManager.CurrentAccentColor);
+      }
+    }
+
+    private void accentColorComboBox_SelectedIndexChanged(object sender, EventArgs e)
+    {
+      if (loading) return;
+
+      if (accentColorComboBox.SelectedItem is AccentColorComboBoxItem selectedItem)
+      {
+        ThemeManager.SetTheme(ThemeManager.CurrentFlavor, selectedItem.AccentColor);
+      }
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+      // Apply theme to this form
+      ThemeManager.ApplyTheme(this);
+
+      // Force a complete refresh of all controls, especially the trackbar
+      this.Refresh();
+
+      // Specifically refresh the transparency trackbar to ensure accent color updates
+      transparencyTrackBar.Invalidate();
+      transparencyTrackBar.Update();
+    }
+
+    private class ThemeComboBoxItem
+    {
+      public CatppuccinTheme.Flavor Flavor { get; }
+
+      public ThemeComboBoxItem(CatppuccinTheme.Flavor flavor)
+      {
+        Flavor = flavor;
+      }
+
+      public override string ToString()
+      {
+        return CatppuccinTheme.GetFlavorDisplayName(Flavor);
+      }
+    }
+
+    private class AccentColorComboBoxItem
+    {
+      public CatppuccinTheme.AccentColor AccentColor { get; }
+
+      public AccentColorComboBoxItem(CatppuccinTheme.AccentColor accentColor)
+      {
+        AccentColor = accentColor;
+      }
+
+      public override string ToString()
+      {
+        return CatppuccinTheme.GetAccentColorDisplayName(AccentColor);
+      }
+    }
+
+    private class GitHubRelease
+    {
+      public string TagName { get; set; } = "";
+      public string HtmlUrl { get; set; } = "";
+    }
   }
 }
