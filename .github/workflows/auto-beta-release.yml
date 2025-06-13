@@ -1,0 +1,333 @@
+name: Auto Beta Release
+
+on:
+  push:
+    branches: [ devel ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+      - '.cursorrules/**'
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  PROJECT_PATH: 'SeeThroughWindows/SeeThroughWindows.csproj'
+  SOLUTION_PATH: 'SeeThroughWindows.sln'
+  BUILD_CONFIGURATION: 'Release'
+
+jobs:
+  auto-beta-release:
+    name: Auto Create Beta Release
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Generate beta version
+      id: generate-version
+      shell: pwsh
+      run: |
+        # Get the latest stable tag (without pre-release identifiers)
+        $stableTags = git tag -l | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Sort-Object -Descending
+        if ($stableTags) {
+          $latestStable = $stableTags[0]
+          $baseVersion = $latestStable -replace '^v', ''
+        } else {
+          $baseVersion = "1.0.0"
+        }
+
+        # Get existing beta tags for this version
+        $betaTags = git tag -l | Where-Object { $_ -match "^v$baseVersion-beta\.\d+$" }
+        $betaNumbers = $betaTags | ForEach-Object {
+          if ($_ -match "beta\.(\d+)$") { [int]$matches[1] }
+        } | Sort-Object -Descending
+
+        $nextBetaNumber = if ($betaNumbers) { $betaNumbers[0] + 1 } else { 1 }
+        $betaVersion = "$baseVersion-beta.$nextBetaNumber"
+        $betaTag = "v$betaVersion"
+
+        echo "base-version=$baseVersion" >> $env:GITHUB_OUTPUT
+        echo "beta-version=$betaVersion" >> $env:GITHUB_OUTPUT
+        echo "beta-tag=$betaTag" >> $env:GITHUB_OUTPUT
+        echo "beta-number=$nextBetaNumber" >> $env:GITHUB_OUTPUT
+
+        echo "Base Version: $baseVersion"
+        echo "Beta Version: $betaVersion"
+        echo "Beta Tag: $betaTag"
+        echo "Beta Number: $nextBetaNumber"
+
+    - name: Check if beta release needed
+      id: check-release
+      shell: pwsh
+      run: |
+        $betaTag = "${{ steps.generate-version.outputs.beta-tag }}"
+
+        # Check if this exact tag already exists
+        $existingTag = git tag -l $betaTag
+        if ($existingTag) {
+          echo "Tag $betaTag already exists, skipping release"
+          echo "skip-release=true" >> $env:GITHUB_OUTPUT
+          exit 0
+        }
+
+        # Check if there are any commits since the last beta tag for this version
+        $baseVersion = "${{ steps.generate-version.outputs.base-version }}"
+        $lastBetaTag = git tag -l | Where-Object { $_ -match "^v$baseVersion-beta\.\d+$" } | Sort-Object -Descending | Select-Object -First 1
+
+        if ($lastBetaTag) {
+          $commitsSinceLastBeta = git rev-list --count "$lastBetaTag..HEAD"
+          if ($commitsSinceLastBeta -eq 0) {
+            echo "No new commits since last beta tag $lastBetaTag, skipping release"
+            echo "skip-release=true" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          echo "Found $commitsSinceLastBeta new commits since $lastBetaTag"
+        } else {
+          echo "No previous beta tags found, proceeding with first beta"
+        }
+
+        echo "skip-release=false" >> $env:GITHUB_OUTPUT
+        echo "Proceeding with beta release $betaTag"
+
+    - name: Restore dependencies
+      if: steps.check-release.outputs.skip-release == 'false'
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build solution
+      if: steps.check-release.outputs.skip-release == 'false'
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+
+    - name: Run tests
+      if: steps.check-release.outputs.skip-release == 'false'
+      run: dotnet test ${{ env.SOLUTION_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-build --verbosity normal
+      continue-on-error: true
+
+    - name: Publish application (Framework-dependent)
+      if: steps.check-release.outputs.skip-release == 'false'
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration ${{ env.BUILD_CONFIGURATION }} `
+          --output "publish/framework-dependent" `
+          --self-contained false `
+          --verbosity normal
+
+    - name: Publish application (Self-contained)
+      if: steps.check-release.outputs.skip-release == 'false'
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration ${{ env.BUILD_CONFIGURATION }} `
+          --output "publish/self-contained" `
+          --self-contained true `
+          --runtime win-x64 `
+          --verbosity normal
+
+    - name: Verify publish outputs
+      if: steps.check-release.outputs.skip-release == 'false'
+      shell: pwsh
+      run: |
+        echo "Verifying publish outputs:"
+
+        if (Test-Path "publish/framework-dependent") {
+          echo "✅ Framework-dependent publish directory exists"
+          $fdFiles = Get-ChildItem "publish/framework-dependent" -File
+          echo "   Files: $($fdFiles.Count)"
+          $fdFiles | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB,2)}} | Format-Table
+        } else {
+          echo "❌ Framework-dependent publish directory NOT found"
+        }
+
+        if (Test-Path "publish/self-contained") {
+          echo "✅ Self-contained publish directory exists"
+          $scFiles = Get-ChildItem "publish/self-contained" -File
+          echo "   Files: $($scFiles.Count)"
+          $scFiles | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB,2)}} | Format-Table
+        } else {
+          echo "❌ Self-contained publish directory NOT found"
+        }
+
+    - name: Create release packages
+      if: steps.check-release.outputs.skip-release == 'false'
+      shell: pwsh
+      run: |
+        $version = "${{ steps.generate-version.outputs.beta-version }}"
+
+        # Create framework-dependent package
+        $fdDir = "SeeThroughWindows-v$version-framework-dependent"
+        New-Item -ItemType Directory -Path $fdDir -Force
+        Copy-Item -Path "publish/framework-dependent/*" -Destination $fdDir -Recurse -Force
+        if (Test-Path "README.md") { Copy-Item "README.md" $fdDir }
+        if (Test-Path "LICENSE") { Copy-Item "LICENSE" $fdDir }
+        Compress-Archive -Path $fdDir -DestinationPath "$fdDir.zip" -Force
+
+        # Create self-contained package
+        $scDir = "SeeThroughWindows-v$version-self-contained-win-x64"
+        New-Item -ItemType Directory -Path $scDir -Force
+        Copy-Item -Path "publish/self-contained/*" -Destination $scDir -Recurse -Force
+        if (Test-Path "README.md") { Copy-Item "README.md" $scDir }
+        if (Test-Path "LICENSE") { Copy-Item "LICENSE" $scDir }
+        Compress-Archive -Path $scDir -DestinationPath "$scDir.zip" -Force
+
+        # Verify packages were created and get full paths
+        $fdZip = Get-Item "$fdDir.zip" | Select-Object -ExpandProperty FullName
+        $scZip = Get-Item "$scDir.zip" | Select-Object -ExpandProperty FullName
+
+        # Output package info with full paths for debugging
+        echo "fd-package=$fdZip" >> $env:GITHUB_OUTPUT
+        echo "sc-package=$scZip" >> $env:GITHUB_OUTPUT
+
+        echo "Created packages:"
+        echo "- Framework-dependent: $fdZip ($([math]::Round((Get-Item $fdZip).Length / 1MB, 2)) MB)"
+        echo "- Self-contained: $scZip ($([math]::Round((Get-Item $scZip).Length / 1MB, 2)) MB)"
+
+        # List all zip files in current directory for verification
+        echo "All ZIP files in current directory:"
+        Get-Item "*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+          echo "- $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+        }
+      id: create-packages
+
+    - name: Generate changelog
+      if: steps.check-release.outputs.skip-release == 'false'
+      id: changelog
+      shell: pwsh
+      run: |
+        $version = "${{ steps.generate-version.outputs.beta-version }}"
+        $betaNumber = "${{ steps.generate-version.outputs.beta-number }}"
+
+        # Try to get commits since last beta tag
+        $baseVersion = "${{ steps.generate-version.outputs.base-version }}"
+        $lastBetaTag = git tag -l | Where-Object { $_ -match "^v$baseVersion-beta\.\d+$" } | Sort-Object -Descending | Select-Object -First 1
+
+        if ($lastBetaTag) {
+          $commits = git log --pretty=format:"- %s (%h)" "$lastBetaTag..HEAD"
+        } else {
+          # If no previous beta, get commits since last stable tag
+          $lastStableTag = git tag -l | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Sort-Object -Descending | Select-Object -First 1
+          if ($lastStableTag) {
+            $commits = git log --pretty=format:"- %s (%h)" "$lastStableTag..HEAD"
+          } else {
+            $commits = git log --pretty=format:"- %s (%h)" -10
+          }
+        }
+
+        # Build changelog with proper line breaks
+        $changelogLines = @()
+        $changelogLines += "## 🧪 Beta Release $betaNumber - What's New"
+        $changelogLines += ""
+        $changelogLines += "⚠️ **This is an automated beta release** - Please test thoroughly before using in production!"
+        $changelogLines += ""
+
+        if ($commits) {
+          $commits -split "`n" | ForEach-Object {
+            if ($_.Trim()) {
+              $changelogLines += $_.Trim()
+            }
+          }
+        } else {
+          $changelogLines += "- Beta release with latest development changes"
+        }
+
+        $changelogLines += ""
+        $changelogLines += "## 📦 Downloads"
+        $changelogLines += ""
+        $changelogLines += "- **Framework-dependent**: Requires .NET 9 runtime to be installed"
+        $changelogLines += "- **Self-contained**: Includes .NET 9 runtime (larger file size)"
+        $changelogLines += ""
+        $changelogLines += "## 🔄 Automated Beta Testing"
+        $changelogLines += ""
+        $changelogLines += "This beta release was automatically created from the ``devel`` branch and contains the latest features and improvements."
+        $changelogLines += "Please report any issues you encounter!"
+        $changelogLines += ""
+
+        if ($lastBetaTag) {
+          $changelogLines += "**Changes since last beta**: https://github.com/${{ github.repository }}/compare/$lastBetaTag...${{ steps.generate-version.outputs.beta-tag }}"
+        } else {
+          $changelogLines += "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.generate-version.outputs.beta-tag }}"
+        }
+
+        # Join with proper newlines and save to file
+        $changelog = $changelogLines -join "`n"
+        $changelog | Out-File -FilePath "changelog.md" -Encoding UTF8 -NoNewline
+
+        # Use proper multiline output format for GitHub Actions
+        $delimiter = "CHANGELOG_EOF_$(Get-Random)"
+        Add-Content -Path $env:GITHUB_OUTPUT -Value "changelog<<$delimiter"
+        Add-Content -Path $env:GITHUB_OUTPUT -Value $changelog
+        Add-Content -Path $env:GITHUB_OUTPUT -Value $delimiter
+
+    - name: Create git tag
+      if: steps.check-release.outputs.skip-release == 'false'
+      shell: pwsh
+      run: |
+        $betaTag = "${{ steps.generate-version.outputs.beta-tag }}"
+        $version = "${{ steps.generate-version.outputs.beta-version }}"
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git tag -a $betaTag -m "Automated beta release $betaTag
+
+This beta release contains the latest features and improvements from the devel branch.
+Please test thoroughly and report any issues.
+
+Auto-created by GitHub Actions on $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+
+        git push origin $betaTag
+        echo "Created and pushed tag: $betaTag"
+
+    - name: Debug package outputs
+      if: steps.check-release.outputs.skip-release == 'false'
+      shell: pwsh
+      run: |
+        echo "Package outputs from previous step:"
+        echo "FD Package: ${{ steps.create-packages.outputs.fd-package }}"
+        echo "SC Package: ${{ steps.create-packages.outputs.sc-package }}"
+
+        echo "Verifying files exist:"
+        if (Test-Path "${{ steps.create-packages.outputs.fd-package }}") {
+          echo "✅ Framework-dependent package exists"
+        } else {
+          echo "❌ Framework-dependent package NOT found"
+        }
+
+        if (Test-Path "${{ steps.create-packages.outputs.sc-package }}") {
+          echo "✅ Self-contained package exists"
+        } else {
+          echo "❌ Self-contained package NOT found"
+        }
+
+    - name: Create GitHub Release
+      if: steps.check-release.outputs.skip-release == 'false'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.generate-version.outputs.beta-tag }}
+        name: SeeThroughWindows v${{ steps.generate-version.outputs.beta-version }} (Auto Beta)
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: true
+        files: |
+          ${{ steps.create-packages.outputs.fd-package }}
+          ${{ steps.create-packages.outputs.sc-package }}
+        fail_on_unmatched_files: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Summary
+      if: steps.check-release.outputs.skip-release == 'false'
+      shell: pwsh
+      run: |
+        $betaTag = "${{ steps.generate-version.outputs.beta-tag }}"
+        echo "🎉 Successfully created automated beta release: $betaTag"
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/$betaTag"
+        echo "📦 Both framework-dependent and self-contained packages should be available"
