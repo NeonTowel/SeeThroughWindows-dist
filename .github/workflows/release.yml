@@ -3,13 +3,22 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+      - 'v*.*.*'        # Stable releases (v1.0.9)
+      - 'v*.*.*-*'      # Pre-releases (v1.0.9-beta.1, v1.0.9-rc.1)
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.9)'
+        description: 'Version to release (e.g., 1.0.9 for stable, 1.0.9-beta.1 for beta)'
         required: true
-        default: '1.0.9'
+        default: '1.0.9-beta.1'
+      branch:
+        description: 'Branch to release from'
+        required: true
+        default: 'devel'
+        type: choice
+        options:
+          - main
+          - devel
 
 permissions:
   contents: write
@@ -29,6 +38,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.inputs.branch || github.ref }}
         fetch-depth: 0
 
     - name: Setup .NET
@@ -36,18 +46,53 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Get version
+    - name: Get version and determine release type
       id: get-version
       shell: pwsh
       run: |
         if ("${{ github.event_name }}" -eq "workflow_dispatch") {
           $version = "${{ github.event.inputs.version }}"
+          $branch = "${{ github.event.inputs.branch }}"
         } else {
           $version = "${{ github.ref_name }}" -replace '^v', ''
+          # Determine branch from tag pattern
+          if ($version -match '-') {
+            $branch = "devel"
+          } else {
+            $branch = "main"
+          }
         }
+
+        $tag = "v$version"
+        $isPrerelease = $version -match '-'
+
         echo "version=$version" >> $env:GITHUB_OUTPUT
-        echo "tag=v$version" >> $env:GITHUB_OUTPUT
+        echo "tag=$tag" >> $env:GITHUB_OUTPUT
+        echo "branch=$branch" >> $env:GITHUB_OUTPUT
+        echo "is-prerelease=$isPrerelease" >> $env:GITHUB_OUTPUT
+
         echo "Version: $version"
+        echo "Tag: $tag"
+        echo "Branch: $branch"
+        echo "Is Prerelease: $isPrerelease"
+
+    - name: Validate branch for release type
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get-version.outputs.version }}"
+        $branch = "${{ steps.get-version.outputs.branch }}"
+        $isPrerelease = "${{ steps.get-version.outputs.is-prerelease }}" -eq "true"
+
+        if ($isPrerelease -and $branch -eq "main") {
+          Write-Error "❌ Pre-release versions (containing '-') should not be released from main branch"
+          exit 1
+        }
+
+        if (-not $isPrerelease -and $branch -eq "devel") {
+          Write-Warning "⚠️  Stable versions are typically released from main branch, but proceeding from devel"
+        }
+
+        echo "✅ Branch validation passed"
 
     - name: Restore dependencies
       run: dotnet restore ${{ env.SOLUTION_PATH }}
@@ -80,6 +125,10 @@ jobs:
       shell: pwsh
       run: |
         $version = "${{ steps.get-version.outputs.version }}"
+        $isPrerelease = "${{ steps.get-version.outputs.is-prerelease }}" -eq "true"
+
+        # Add prerelease suffix to package names if needed
+        $suffix = if ($isPrerelease) { "-$($version -replace '.*-', '')" } else { "" }
 
         # Create framework-dependent package
         $fdDir = "SeeThroughWindows-v$version-framework-dependent"
@@ -112,6 +161,8 @@ jobs:
       shell: pwsh
       run: |
         $version = "${{ steps.get-version.outputs.version }}"
+        $branch = "${{ steps.get-version.outputs.branch }}"
+        $isPrerelease = "${{ steps.get-version.outputs.is-prerelease }}" -eq "true"
 
         # Try to get commits since last tag
         $lastTag = git describe --tags --abbrev=0 HEAD^ 2>$null
@@ -123,8 +174,16 @@ jobs:
 
         # Build changelog with proper line breaks
         $changelogLines = @()
-        $changelogLines += "## What's Changed"
-        $changelogLines += ""
+
+        if ($isPrerelease) {
+          $changelogLines += "## 🧪 Beta Release - What's New"
+          $changelogLines += ""
+          $changelogLines += "⚠️ **This is a beta release** - Please test thoroughly before using in production!"
+          $changelogLines += ""
+        } else {
+          $changelogLines += "## ✨ What's Changed"
+          $changelogLines += ""
+        }
 
         if ($commits) {
           $commits -split "`n" | ForEach-Object {
@@ -133,15 +192,27 @@ jobs:
             }
           }
         } else {
-          $changelogLines += "- Initial release"
+          if ($isPrerelease) {
+            $changelogLines += "- Beta release with latest development changes"
+          } else {
+            $changelogLines += "- Initial release"
+          }
         }
 
         $changelogLines += ""
-        $changelogLines += "## Downloads"
+        $changelogLines += "## 📦 Downloads"
         $changelogLines += ""
         $changelogLines += "- **Framework-dependent**: Requires .NET 9 runtime to be installed"
         $changelogLines += "- **Self-contained**: Includes .NET 9 runtime (larger file size)"
         $changelogLines += ""
+
+        if ($isPrerelease) {
+          $changelogLines += "## 🔄 Beta Testing"
+          $changelogLines += ""
+          $changelogLines += "This beta release is built from the ``$branch`` branch and contains the latest features and improvements."
+          $changelogLines += "Please report any issues you encounter!"
+          $changelogLines += ""
+        }
 
         if ($lastTag) {
           $changelogLines += "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$lastTag...${{ steps.get-version.outputs.tag }}"
@@ -163,10 +234,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.get-version.outputs.tag }}
-        name: SeeThroughWindows v${{ steps.get-version.outputs.version }}
+        name: ${{ steps.get-version.outputs.is-prerelease == 'true' && format('SeeThroughWindows v{0} (Beta)', steps.get-version.outputs.version) || format('SeeThroughWindows v{0}', steps.get-version.outputs.version) }}
         body: ${{ steps.changelog.outputs.changelog }}
         draft: false
-        prerelease: false
+        prerelease: ${{ steps.get-version.outputs.is-prerelease }}
         files: |
           ${{ steps.create-packages.outputs.fd-package }}
           ${{ steps.create-packages.outputs.sc-package }}

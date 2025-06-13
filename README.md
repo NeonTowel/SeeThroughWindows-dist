@@ -276,6 +276,55 @@ The application now features a modern service-based architecture:
 - **Global Reset**: System-wide transparency reset functionality
 - **WindowDebugger Tool**: Standalone debugging utility for development and troubleshooting
 
+## Release Process
+
+### 🧪 Beta Releases (from `devel` branch)
+
+Beta releases use semantic versioning with pre-release identifiers:
+
+```powershell
+# Create a beta release
+.\scripts\create-beta-release.ps1 -Version "1.0.9" -BetaNumber 1
+# This creates tag: v1.0.9-beta.1
+```
+
+Beta releases are:
+
+- Built from the `devel` branch
+- Marked as "pre-release" on GitHub
+- Include latest features but may be unstable
+- Perfect for testing new functionality
+
+### 🌟 Stable Releases (from `main` branch)
+
+Stable releases are created after beta testing is complete:
+
+```powershell
+# Create a stable release (after merging devel to main)
+.\scripts\create-stable-release.ps1 -Version "1.0.9" -MergeFromDevel
+# This creates tag: v1.0.9
+```
+
+Stable releases are:
+
+- Built from the `main` branch
+- Thoroughly tested through beta releases
+- Ready for production use
+- Follow semantic versioning (X.Y.Z)
+
+### 📋 Versioning Strategy
+
+- **`main` branch**: Stable releases (`v1.0.9`, `v1.1.0`)
+- **`devel` branch**: Beta releases (`v1.0.9-beta.1`, `v1.1.0-beta.2`)
+- **Feature branches**: No automatic releases
+
+### 🔄 Workflow
+
+1. **Development**: Work on feature branches, merge to `devel`
+2. **Beta Testing**: Create beta releases from `devel` using the script
+3. **Stabilization**: Fix issues, create additional beta releases as needed
+4. **Release**: Merge `devel` to `main`, create stable release
+
 ## License
 
 Copyright © 2008-2024, MOBZystems BV, Amsterdam
