@@ -121,14 +121,34 @@ jobs:
           --runtime win-x64 `
           --verbosity normal
 
+    - name: Verify publish outputs
+      shell: pwsh
+      run: |
+        echo "Verifying publish outputs:"
+
+        if (Test-Path "publish/framework-dependent") {
+          echo "✅ Framework-dependent publish directory exists"
+          $fdFiles = Get-ChildItem "publish/framework-dependent" -File
+          echo "   Files: $($fdFiles.Count)"
+          $fdFiles | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB,2)}} | Format-Table
+        } else {
+          echo "❌ Framework-dependent publish directory NOT found"
+        }
+
+        if (Test-Path "publish/self-contained") {
+          echo "✅ Self-contained publish directory exists"
+          $scFiles = Get-ChildItem "publish/self-contained" -File
+          echo "   Files: $($scFiles.Count)"
+          $scFiles | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB,2)}} | Format-Table
+        } else {
+          echo "❌ Self-contained publish directory NOT found"
+        }
+
     - name: Create release packages
       shell: pwsh
       run: |
         $version = "${{ steps.get-version.outputs.version }}"
         $isPrerelease = "${{ steps.get-version.outputs.is-prerelease }}" -eq "true"
-
-        # Add prerelease suffix to package names if needed
-        $suffix = if ($isPrerelease) { "-$($version -replace '.*-', '')" } else { "" }
 
         # Create framework-dependent package
         $fdDir = "SeeThroughWindows-v$version-framework-dependent"
@@ -146,12 +166,37 @@ jobs:
         if (Test-Path "LICENSE") { Copy-Item "LICENSE" $scDir }
         Compress-Archive -Path $scDir -DestinationPath "$scDir.zip" -Force
 
-        # Output package info
-        echo "fd-package=$fdDir.zip" >> $env:GITHUB_OUTPUT
-        echo "sc-package=$scDir.zip" >> $env:GITHUB_OUTPUT
+        # Verify packages were created and get full paths
+        $fdZip = Get-Item "$fdDir.zip" | Select-Object -ExpandProperty FullName
+        $scZip = Get-Item "$scDir.zip" | Select-Object -ExpandProperty FullName
+
+        # Output package info with full paths for debugging
+        echo "fd-package=$fdZip" >> $env:GITHUB_OUTPUT
+        echo "sc-package=$scZip" >> $env:GITHUB_OUTPUT
 
         echo "Created packages:"
-        Get-Item "*.zip" | ForEach-Object {
+        echo "- Framework-dependent: $fdZip ($([math]::Round((Get-Item $fdZip).Length / 1MB, 2)) MB)"
+        echo "- Self-contained: $scZip ($([math]::Round((Get-Item $scZip).Length / 1MB, 2)) MB)"
+
+        # Verify publish directories exist and have content
+        echo "Verifying publish directories:"
+        if (Test-Path "publish/framework-dependent") {
+          $fdFiles = Get-ChildItem "publish/framework-dependent" -Recurse | Measure-Object
+          echo "- Framework-dependent: $($fdFiles.Count) files"
+        } else {
+          echo "- Framework-dependent: Directory not found!"
+        }
+
+        if (Test-Path "publish/self-contained") {
+          $scFiles = Get-ChildItem "publish/self-contained" -Recurse | Measure-Object
+          echo "- Self-contained: $($scFiles.Count) files"
+        } else {
+          echo "- Self-contained: Directory not found!"
+        }
+
+        # List all zip files in current directory for verification
+        echo "All ZIP files in current directory:"
+        Get-Item "*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
           echo "- $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
         }
       id: create-packages
@@ -230,6 +275,26 @@ jobs:
         Add-Content -Path $env:GITHUB_OUTPUT -Value $changelog
         Add-Content -Path $env:GITHUB_OUTPUT -Value $delimiter
 
+    - name: Debug package outputs
+      shell: pwsh
+      run: |
+        echo "Package outputs from previous step:"
+        echo "FD Package: ${{ steps.create-packages.outputs.fd-package }}"
+        echo "SC Package: ${{ steps.create-packages.outputs.sc-package }}"
+
+        echo "Verifying files exist:"
+        if (Test-Path "${{ steps.create-packages.outputs.fd-package }}") {
+          echo "✅ Framework-dependent package exists"
+        } else {
+          echo "❌ Framework-dependent package NOT found"
+        }
+
+        if (Test-Path "${{ steps.create-packages.outputs.sc-package }}") {
+          echo "✅ Self-contained package exists"
+        } else {
+          echo "❌ Self-contained package NOT found"
+        }
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
@@ -241,5 +306,6 @@ jobs:
         files: |
           ${{ steps.create-packages.outputs.fd-package }}
           ${{ steps.create-packages.outputs.sc-package }}
+        fail_on_unmatched_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
