@@ -2,9 +2,9 @@ name: CI Build
 
 on:
   push:
-    branches: [ main, develop, feature/* ]
+    branches: [ main, devel, feat/* ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, devel ]
 
 env:
   DOTNET_VERSION: '9.0.x'
