@@ -121,24 +121,43 @@ jobs:
           $commits = git log --pretty=format:"- %s (%h)" -10
         }
 
-        $changelog = @"
-        ## What's Changed
+        # Build changelog with proper line breaks
+        $changelogLines = @()
+        $changelogLines += "## What's Changed"
+        $changelogLines += ""
 
-        $commits
+        if ($commits) {
+          $commits -split "`n" | ForEach-Object {
+            if ($_.Trim()) {
+              $changelogLines += $_.Trim()
+            }
+          }
+        } else {
+          $changelogLines += "- Initial release"
+        }
 
-        ## Downloads
+        $changelogLines += ""
+        $changelogLines += "## Downloads"
+        $changelogLines += ""
+        $changelogLines += "- **Framework-dependent**: Requires .NET 9 runtime to be installed"
+        $changelogLines += "- **Self-contained**: Includes .NET 9 runtime (larger file size)"
+        $changelogLines += ""
 
-        - **Framework-dependent**: Requires .NET 9 runtime to be installed
-        - **Self-contained**: Includes .NET 9 runtime (larger file size)
+        if ($lastTag) {
+          $changelogLines += "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$lastTag...${{ steps.get-version.outputs.tag }}"
+        } else {
+          $changelogLines += "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.get-version.outputs.tag }}"
+        }
 
-        **Full Changelog**: https://github.com/${{ github.repository }}/compare/$lastTag...${{ steps.get-version.outputs.tag }}
-        "@
+        # Join with proper newlines and save to file
+        $changelog = $changelogLines -join "`n"
+        $changelog | Out-File -FilePath "changelog.md" -Encoding UTF8 -NoNewline
 
-        # Save changelog to file and output
-        $changelog | Out-File -FilePath "changelog.md" -Encoding UTF8
-        echo "changelog<<EOF" >> $env:GITHUB_OUTPUT
-        echo $changelog >> $env:GITHUB_OUTPUT
-        echo "EOF" >> $env:GITHUB_OUTPUT
+        # Use proper multiline output format for GitHub Actions
+        $delimiter = "CHANGELOG_EOF_$(Get-Random)"
+        Add-Content -Path $env:GITHUB_OUTPUT -Value "changelog<<$delimiter"
+        Add-Content -Path $env:GITHUB_OUTPUT -Value $changelog
+        Add-Content -Path $env:GITHUB_OUTPUT -Value $delimiter
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
