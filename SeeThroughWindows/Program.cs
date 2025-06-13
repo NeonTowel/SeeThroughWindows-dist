@@ -1,3 +1,6 @@
+using SeeThroughWindows.Infrastructure;
+using SeeThroughWindows.Services;
+
 namespace SeeThroughWindows;
 
 static class Program
@@ -21,10 +24,19 @@ static class Program
         // Exit immediately
         return;
       }
+
       // To customize application configuration such as set high DPI settings or default font,
       // see https://aka.ms/applicationconfiguration.
       ApplicationConfiguration.Initialize();
-      Application.Run(new SeeThrougWindowsForm());
+
+      // Set up dependency injection
+      var serviceContainer = new ServiceContainer();
+      ConfigureServices(serviceContainer);
+      ServiceLocator.Initialize(serviceContainer);
+
+      // Run the application
+      var mainForm = ServiceLocator.Resolve<SeeThrougWindowsForm>();
+      Application.Run(mainForm);
 
       GC.KeepAlive(m); // important!
     }
@@ -35,5 +47,36 @@ static class Program
                       MessageBoxButtons.OK,
                       MessageBoxIcon.Error);
     }
+  }
+
+  /// <summary>
+  /// Configure dependency injection services
+  /// </summary>
+  private static void ConfigureServices(ServiceContainer container)
+  {
+    // Register services
+    container.RegisterTransient<ISettingsManager, RegistrySettingsManager>();
+    container.RegisterTransient<IWindowManager, WindowManager>();
+    container.RegisterTransient<IHotkeyManager, HotkeyManager>();
+    container.RegisterTransient<IUpdateChecker, GitHubUpdateChecker>();
+
+    // Register application service
+    container.RegisterFactory<IApplicationService>(() =>
+    {
+      var windowManager = container.Resolve<IWindowManager>();
+      var settingsManager = container.Resolve<ISettingsManager>();
+      return new ApplicationService(windowManager, settingsManager);
+    });
+
+    // Register main form
+    container.RegisterFactory<SeeThrougWindowsForm>(() =>
+    {
+      var applicationService = container.Resolve<IApplicationService>();
+      var hotkeyManager = container.Resolve<IHotkeyManager>();
+      var settingsManager = container.Resolve<ISettingsManager>();
+      var updateChecker = container.Resolve<IUpdateChecker>();
+
+      return new SeeThrougWindowsForm(applicationService, hotkeyManager, settingsManager, updateChecker);
+    });
   }
 }

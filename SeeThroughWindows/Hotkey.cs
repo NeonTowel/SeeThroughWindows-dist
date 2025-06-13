@@ -116,16 +116,14 @@ namespace SeeThroughWindows.Core // Changed from MOBZystems to match project str
         keyname = "D" + keyname;
 
       return (Keys)Enum.Parse(typeof(Keys), keyname);
-    }
-
-    /// <summary>
+    }    /// <summary>
     /// Helper function to convert a key code (Keys.F1) to a string ('F1')
     /// </summary>
     /// <param name="key"></param>
     /// <returns></returns>
     public static string KeyCodeToString(Keys key)
     {
-      string keyName = Enum.GetName(typeof(Keys), key);
+      string keyName = Enum.GetName(typeof(Keys), key) ?? key.ToString();
       switch (key)
       {
         case Keys.D0:
@@ -261,10 +259,8 @@ namespace SeeThroughWindows.Core // Changed from MOBZystems to match project str
       if (!this.isRegistered)
       {
         throw new NotSupportedException("You cannot unregister a hotkey that is not registered");
-      }
-
-      // It's possible that the control itself has died: in that case, no need to unregister!
-      if (!this.windowControl.IsDisposed)
+      }      // It's possible that the control itself has died: in that case, no need to unregister!
+      if (this.windowControl != null && !this.windowControl.IsDisposed)
       {
         // Clean up after ourselves
         if (Hotkey.UnregisterHotKey(this.windowControl.Handle, this.id) == 0)
@@ -287,14 +283,15 @@ namespace SeeThroughWindows.Core // Changed from MOBZystems to match project str
       if (!this.isRegistered)
       {
         return;
-      }
-
-      // Save control reference
-      Control windowControl = this.windowControl;
+      }      // Save control reference
+      Control? windowControl = this.windowControl;
 
       // Unregister and then reregister again
       this.Unregister();
-      this.Register(windowControl);
+      if (windowControl != null)
+      {
+        this.Register(windowControl);
+      }
     }
 
     /// <summary>

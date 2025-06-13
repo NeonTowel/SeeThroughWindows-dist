@@ -16,14 +16,13 @@
     <Company>MOBZystems</Company>
     <Copyright>Copyright © 2008-2024, MOBZystems BV, Amsterdam</Copyright>
     <Description>See Through Windows Tool</Description>
-    <PackageIcon>Glasses-64B.png</PackageIcon>
-
-    <!-- Code Analysis -->
+    <PackageIcon>Glasses-64B.png</PackageIcon>    <!-- Code Analysis -->
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors />
-    <WarningsNotAsErrors>CS8618;CS8600;CS8601;CS8602;CS8603;CS8604</WarningsNotAsErrors>
+    <WarningsNotAsErrors>CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS0168;CS0169</WarningsNotAsErrors>
+    <NoWarn>CS0168;CS0169</NoWarn>
 
     <!-- Language Features -->
     <LangVersion>latest</LangVersion>
