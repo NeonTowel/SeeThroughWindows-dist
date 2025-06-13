@@ -1,14 +1,10 @@
 using SeeThroughWindows.Infrastructure;
 using SeeThroughWindows.Services;
-using System.Runtime.InteropServices;
 
 namespace SeeThroughWindows;
 
 static class Program
 {
-  [DllImport("kernel32.dll")]
-  static extern void AllocConsole();
-
   /// <summary>
   /// The main entry point for the application.
   /// </summary>  [STAThread]
@@ -16,11 +12,7 @@ static class Program
   {
     try
     {
-      // Allocate console for debugging (only in debug builds)
-#if DEBUG
-      AllocConsole();
-      Console.WriteLine("SeeThroughWindows Debug Console Started");
-#endif
+
 
       // Make sure we have a single instance of this application running:
       bool ok;

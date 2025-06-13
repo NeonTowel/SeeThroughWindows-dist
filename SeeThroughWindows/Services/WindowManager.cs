@@ -157,7 +157,6 @@ namespace SeeThroughWindows.Services
             {
                 // Log the error but don't throw - we want to continue restoring other windows
                 Debug.WriteLine($"WindowManager: Error restoring window {windowHandle}: {ex.Message}");
-                Console.WriteLine($"WindowManager: Error restoring window {windowHandle}: {ex.Message}");
             }
         }
 

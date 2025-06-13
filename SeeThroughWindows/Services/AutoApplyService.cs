@@ -86,9 +86,7 @@ namespace SeeThroughWindows.Services
 
             // Debug: Log the exclusion lists
             Debug.WriteLine($"AutoApplyService: Excluded processes: {string.Join(", ", _excludedProcessNames)}");
-            Console.WriteLine($"AutoApplyService: Excluded processes: {string.Join(", ", _excludedProcessNames)}");
             Debug.WriteLine($"AutoApplyService: Excluded window titles: {string.Join(", ", _excludedWindowTitles.Where(t => !string.IsNullOrEmpty(t)))} + [empty titles]");
-            Console.WriteLine($"AutoApplyService: Excluded window titles: {string.Join(", ", _excludedWindowTitles.Where(t => !string.IsNullOrEmpty(t)))} + [empty titles]");
         }
 
         /// <summary>
@@ -177,20 +175,17 @@ namespace SeeThroughWindows.Services
             int appliedCount = 0;
 
             Debug.WriteLine($"AutoApplyService: Found {eligibleWindows.Count} eligible windows");
-            Console.WriteLine($"AutoApplyService: Found {eligibleWindows.Count} eligible windows");
 
             foreach (var (handle, title) in eligibleWindows)
             {
                 try
                 {
                     Debug.WriteLine($"AutoApplyService: Processing window '{title}' (Handle: {handle})");
-                    Console.WriteLine($"AutoApplyService: Processing window '{title}' (Handle: {handle})");
 
                     // Double-check visibility before applying (window state might have changed)
                     if (!IsWindowActuallyVisible(handle))
                     {
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is no longer actually visible, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is no longer actually visible, skipping");
                         continue;
                     }
 
@@ -198,7 +193,6 @@ namespace SeeThroughWindows.Services
                     if (_windowManager.IsDesktopWindow(handle))
                     {
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is desktop window, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is desktop window, skipping");
                         continue;
                     }
 
@@ -207,19 +201,16 @@ namespace SeeThroughWindows.Services
                     _windowManager.ApplyTransparency(handle, windowInfo, transparencyValue, clickThrough, topMost);
 
                     Debug.WriteLine($"AutoApplyService: Successfully applied transparency to '{title}'");
-                    Console.WriteLine($"AutoApplyService: Successfully applied transparency to '{title}'");
                     appliedCount++;
                 }
                 catch (Exception ex)
                 {
                     // Log the error but continue with other windows
                     Debug.WriteLine($"AutoApplyService: Failed to apply transparency to window '{title}' (Handle: {handle}): {ex.Message}");
-                    Console.WriteLine($"AutoApplyService: Failed to apply transparency to window '{title}' (Handle: {handle}): {ex.Message}");
                 }
             }
 
             Debug.WriteLine($"AutoApplyService: Applied transparency to {appliedCount} windows");
-            Console.WriteLine($"AutoApplyService: Applied transparency to {appliedCount} windows");
             return appliedCount;
         }
 
@@ -229,7 +220,6 @@ namespace SeeThroughWindows.Services
             var allWindows = new List<(IntPtr Handle, string Title, string Reason)>();
 
             Debug.WriteLine("AutoApplyService: Starting enhanced window enumeration for auto-apply");
-            Console.WriteLine("AutoApplyService: Starting enhanced window enumeration for auto-apply");
 
             Win32Api.EnumWindows((hWnd, lParam) =>
             {
@@ -240,14 +230,12 @@ namespace SeeThroughWindows.Services
                     var processName = GetProcessName(hWnd);
 
                     Debug.WriteLine($"AutoApplyService: Examining window '{title}' (Process: {processName}, Handle: {hWnd})");
-                    Console.WriteLine($"AutoApplyService: Examining window '{title}' (Process: {processName}, Handle: {hWnd})");
 
                     // Enhanced visibility check - only process actually visible windows
                     if (!IsWindowActuallyVisible(hWnd))
                     {
                         allWindows.Add((hWnd, title, "Not actually visible"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is not actually visible, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is not actually visible, skipping");
                         return true;
                     }
 
@@ -256,7 +244,6 @@ namespace SeeThroughWindows.Services
                     {
                         allWindows.Add((hWnd, title, "Not in foreground layer"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is not in foreground layer, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is not in foreground layer, skipping");
                         return true;
                     }
 
@@ -265,7 +252,6 @@ namespace SeeThroughWindows.Services
                     {
                         allWindows.Add((hWnd, title, "Critical system window"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is critical system window, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is critical system window, skipping");
                         return true;
                     }
 
@@ -274,7 +260,6 @@ namespace SeeThroughWindows.Services
                     {
                         allWindows.Add((hWnd, title, "Excluded title"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' has excluded title, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' has excluded title, skipping");
                         return true;
                     }
 
@@ -283,7 +268,6 @@ namespace SeeThroughWindows.Services
                     {
                         allWindows.Add((hWnd, title, $"Excluded process: {processName}"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' has excluded process '{processName}', skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' has excluded process '{processName}', skipping");
                         return true;
                     }
 
@@ -292,7 +276,6 @@ namespace SeeThroughWindows.Services
                     {
                         allWindows.Add((hWnd, title, "Desktop window"));
                         Debug.WriteLine($"AutoApplyService: Window '{title}' is desktop window, skipping");
-                        Console.WriteLine($"AutoApplyService: Window '{title}' is desktop window, skipping");
                         return true;
                     }
 
@@ -305,13 +288,11 @@ namespace SeeThroughWindows.Services
                         {
                             allWindows.Add((hWnd, title, $"Already transparent (alpha: {alpha})"));
                             Debug.WriteLine($"AutoApplyService: Window '{title}' already has transparency (alpha: {alpha}), skipping");
-                            Console.WriteLine($"AutoApplyService: Window '{title}' already has transparency (alpha: {alpha}), skipping");
                             return true;
                         }
                         else
                         {
                             Debug.WriteLine($"AutoApplyService: Window '{title}' is layered but opaque (alpha: {alpha}), including");
-                            Console.WriteLine($"AutoApplyService: Window '{title}' is layered but opaque (alpha: {alpha}), including");
                         }
                     }
 
@@ -319,12 +300,10 @@ namespace SeeThroughWindows.Services
                     allWindows.Add((hWnd, title, "ELIGIBLE"));
                     windows.Add((hWnd, title));
                     Debug.WriteLine($"AutoApplyService: Window '{title}' is ELIGIBLE for transparency");
-                    Console.WriteLine($"AutoApplyService: Window '{title}' is ELIGIBLE for transparency");
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"AutoApplyService: Error examining window {hWnd}: {ex.Message}");
-                    Console.WriteLine($"AutoApplyService: Error examining window {hWnd}: {ex.Message}");
                 }
 
                 return true;
@@ -332,7 +311,6 @@ namespace SeeThroughWindows.Services
 
             // Summary logging
             Debug.WriteLine($"AutoApplyService: Enhanced window enumeration complete. Found {windows.Count} eligible windows out of {allWindows.Count} total windows examined");
-            Console.WriteLine($"AutoApplyService: Enhanced window enumeration complete. Found {windows.Count} eligible windows out of {allWindows.Count} total windows examined");
 
             // Log summary of exclusion reasons
             var exclusionSummary = allWindows
@@ -344,7 +322,6 @@ namespace SeeThroughWindows.Services
             if (exclusionSummary.Any())
             {
                 Debug.WriteLine($"AutoApplyService: Exclusion summary: {string.Join(", ", exclusionSummary)}");
-                Console.WriteLine($"AutoApplyService: Exclusion summary: {string.Join(", ", exclusionSummary)}");
             }
 
             return windows;
@@ -413,7 +390,6 @@ namespace SeeThroughWindows.Services
             var windows = new List<(IntPtr Handle, string Title, string ProcessName)>();
 
             Debug.WriteLine("AutoApplyService: Starting enhanced window enumeration for all actually visible windows (no filtering)");
-            Console.WriteLine("AutoApplyService: Starting enhanced window enumeration for all actually visible windows (no filtering)");
 
             Win32Api.EnumWindows((hWnd, lParam) =>
             {
@@ -428,19 +404,16 @@ namespace SeeThroughWindows.Services
 
                     windows.Add((hWnd, title, processName));
                     Debug.WriteLine($"AutoApplyService: Found actually visible window '{title}' (Process: {processName}, Handle: {hWnd})");
-                    Console.WriteLine($"AutoApplyService: Found actually visible window '{title}' (Process: {processName}, Handle: {hWnd})");
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"AutoApplyService: Error examining window {hWnd}: {ex.Message}");
-                    Console.WriteLine($"AutoApplyService: Error examining window {hWnd}: {ex.Message}");
                 }
 
                 return true;
             }, IntPtr.Zero);
 
             Debug.WriteLine($"AutoApplyService: Found {windows.Count} total actually visible windows");
-            Console.WriteLine($"AutoApplyService: Found {windows.Count} total actually visible windows");
 
             return windows;
         }

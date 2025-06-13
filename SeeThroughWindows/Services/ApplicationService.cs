@@ -88,6 +88,11 @@ namespace SeeThroughWindows.Services
         void RestoreAllWindows();
 
         /// <summary>
+        /// Reset transparency globally for all non-opaque windows except those on restrictions list
+        /// </summary>
+        void ResetTransparencyGlobally();
+
+        /// <summary>
         /// Apply transparency to all visible windows (for startup auto-apply)
         /// </summary>
         /// <returns>The number of windows that had transparency applied</returns>
@@ -141,31 +146,26 @@ namespace SeeThroughWindows.Services
             _currentSettings = _settingsManager.LoadSettings();
 
             Debug.WriteLine($"ApplicationService: AutoApplyOnStartup = {_currentSettings.AutoApplyOnStartup}");
-            Console.WriteLine($"ApplicationService: AutoApplyOnStartup = {_currentSettings.AutoApplyOnStartup}");
 
             // Apply auto-transparency if enabled
             if (_currentSettings.AutoApplyOnStartup)
             {
                 Debug.WriteLine("ApplicationService: Auto-apply is enabled, starting background task");
-                Console.WriteLine("ApplicationService: Auto-apply is enabled, starting background task");
 
                 Task.Run(() =>
                 {
                     // Add a small delay to ensure all windows are fully loaded
                     Debug.WriteLine("ApplicationService: Waiting 2 seconds before applying transparency");
-                    Console.WriteLine("ApplicationService: Waiting 2 seconds before applying transparency");
                     Thread.Sleep(2000);
 
                     try
                     {
                         Debug.WriteLine("ApplicationService: Starting auto-apply transparency");
-                        Console.WriteLine("ApplicationService: Starting auto-apply transparency");
                         var appliedCount = ApplyTransparencyToAllVisibleWindows();
 
                         if (appliedCount > 0)
                         {
                             Debug.WriteLine($"ApplicationService: Auto-apply completed successfully, applied to {appliedCount} windows");
-                            Console.WriteLine($"ApplicationService: Auto-apply completed successfully, applied to {appliedCount} windows");
 
                             // Notify UI that window count has changed
                             HijackedWindowCountChanged?.Invoke(this, EventArgs.Empty);
@@ -179,13 +179,11 @@ namespace SeeThroughWindows.Services
                         else
                         {
                             Debug.WriteLine("ApplicationService: Auto-apply completed, but no eligible windows found");
-                            Console.WriteLine("ApplicationService: Auto-apply completed, but no eligible windows found");
                         }
                     }
                     catch (Exception ex)
                     {
                         Debug.WriteLine($"ApplicationService: Auto-apply failed: {ex.Message}");
-                        Console.WriteLine($"ApplicationService: Auto-apply failed: {ex.Message}");
 
                         NotificationRequested?.Invoke(this, new NotificationEventArgs(
                             "See Through Windows",
@@ -197,7 +195,6 @@ namespace SeeThroughWindows.Services
             else
             {
                 Debug.WriteLine("ApplicationService: Auto-apply is disabled");
-                Console.WriteLine("ApplicationService: Auto-apply is disabled");
             }
         }
 
@@ -404,83 +401,209 @@ namespace SeeThroughWindows.Services
             // Notify UI that window count has changed
             HijackedWindowCountChanged?.Invoke(this, EventArgs.Empty);
         }
-        public int ApplyTransparencyToAllVisibleWindows()
+
+        public void ResetTransparencyGlobally()
         {
-            // Debug: Write basic window information to a log file for troubleshooting
-            try
+            var restoredCount = 0;
+            var allWindows = new List<(IntPtr Handle, string Title)>();
+
+            // Enumerate all visible windows
+            Win32Api.EnumWindows((hWnd, lParam) =>
             {
-                var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "SeeThroughWindows_Debug.txt");
-                using (var writer = new StreamWriter(logPath, false))
+                try
                 {
-                    writer.WriteLine($"=== SeeThroughWindows Auto-Apply Debug Log ===");
-                    writer.WriteLine($"Timestamp: {DateTime.Now}");
-                    writer.WriteLine($"Settings - SemiTransparentValue: {_currentSettings.SemiTransparentValue}");
-                    writer.WriteLine($"Settings - ClickThrough: {_currentSettings.ClickThrough}");
-                    writer.WriteLine($"Settings - TopMost: {_currentSettings.TopMost}");
-                    writer.WriteLine($"Settings - AutoApplyOnStartup: {_currentSettings.AutoApplyOnStartup}");
-                    writer.WriteLine();
+                    // Skip if not visible
+                    if (!Win32Api.IsWindowVisible(hWnd))
+                        return true;
 
-                    // Get eligible windows
-                    var eligibleWindows = _autoApplyService.GetEligibleWindows();
-                    writer.WriteLine($"Eligible windows found: {eligibleWindows.Count}");
-                    writer.WriteLine();
+                    // Skip minimized windows
+                    if (Win32Api.IsIconic(hWnd))
+                        return true;
 
-                    if (eligibleWindows.Any())
+                    // Skip desktop and shell windows
+                    if (hWnd == Win32Api.GetDesktopWindow() || hWnd == Win32Api.GetShellWindow())
+                        return true;
+
+                    // Get window title and process name for filtering
+                    var title = GetWindowTitle(hWnd);
+                    var processName = GetProcessName(hWnd);
+
+                    // Skip if on restrictions list (same logic as AutoApplyService)
+                    if (IsOnRestrictionsListForReset(processName, title))
+                        return true;
+
+                    // Check if window is currently transparent (not opaque)
+                    var currentStyle = Win32Api.GetWindowLong(hWnd, Win32Api.GWL_EX_STYLE);
+                    if ((currentStyle & Win32Api.WS_EX_LAYERED) != 0)
                     {
-                        writer.WriteLine("=== ELIGIBLE WINDOWS ===");
-                        foreach (var (handle, title) in eligibleWindows)
+                        // Window has layered style, check if it's actually transparent
+                        if (Win32Api.GetLayeredWindowAttributes(hWnd, out _, out short alpha, out _))
                         {
-                            writer.WriteLine($"Handle: {handle}, Title: '{title}'");
+                            if (alpha < 255) // Not fully opaque
+                            {
+                                allWindows.Add((hWnd, title));
+                            }
                         }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ApplicationService: Error examining window {hWnd}: {ex.Message}");
+                }
+
+                return true;
+            }, IntPtr.Zero);
+
+            // Restore transparency for all found windows
+            foreach (var (handle, title) in allWindows)
+            {
+                try
+                {
+                    // Check if window still exists
+                    if (!Win32Api.IsWindow(handle))
+                        continue;
+
+                    // If we're tracking this window, use our restore method
+                    if (_hijackedWindows.ContainsKey(handle))
+                    {
+                        var windowInfo = _hijackedWindows[handle];
+                        _windowManager.RestoreWindow(handle, windowInfo);
+                        _hijackedWindows.Remove(handle);
                     }
                     else
                     {
-                        writer.WriteLine("No eligible windows found for auto-apply transparency.");
+                        // Window not tracked by us, manually restore it
+                        var currentStyle = Win32Api.GetWindowLong(handle, Win32Api.GWL_EX_STYLE);
+                        var restoredStyle = currentStyle & ~(uint)Win32Api.WS_EX_LAYERED;
+                        Win32Api.SetWindowLong(handle, Win32Api.GWL_EX_STYLE, restoredStyle);
+
+                        // Remove topmost if it was added
+                        Win32Api.SetWindowPos(handle, new IntPtr(Win32Api.HWND_NOTOPMOST), 0, 0, 0, 0,
+                            Win32Api.SWP_NOSIZE | Win32Api.SWP_NOMOVE);
+
+                        // Force redraw
+                        Win32Api.InvalidateRect(handle, IntPtr.Zero, true);
                     }
 
-                    writer.WriteLine();
-                    writer.WriteLine("=== END DEBUG LOG ===");
+                    restoredCount++;
+                    Debug.WriteLine($"ApplicationService: Reset transparency for window '{title}'");
                 }
-
-                Debug.WriteLine($"ApplicationService: Debug log written to {logPath}");
-                Console.WriteLine($"ApplicationService: Debug log written to {logPath}");
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ApplicationService: Failed to reset transparency for window '{title}': {ex.Message}");
+                }
             }
-            catch (Exception ex)
+
+            Debug.WriteLine($"ApplicationService: Reset transparency for {restoredCount} windows globally");
+
+            // Notify UI that window count has changed
+            HijackedWindowCountChanged?.Invoke(this, EventArgs.Empty);
+
+            // Show notification
+            NotificationRequested?.Invoke(this, new NotificationEventArgs(
+                "See Through Windows",
+                $"Reset transparency for {restoredCount} windows",
+                ToolTipIcon.Info));
+        }
+
+        private string GetWindowTitle(IntPtr hWnd)
+        {
+            const int maxLength = 256;
+            var title = new StringBuilder(maxLength);
+            Win32Api.GetWindowText(hWnd, title, maxLength);
+            return title.ToString();
+        }
+
+        private string GetProcessName(IntPtr hWnd)
+        {
+            try
             {
-                Debug.WriteLine($"ApplicationService: Failed to write debug log: {ex.Message}");
-                Console.WriteLine($"ApplicationService: Failed to write debug log: {ex.Message}");
+                Win32Api.GetWindowThreadProcessId(hWnd, out uint processId);
+                using var process = Process.GetProcessById((int)processId);
+                return process.ProcessName.ToLower();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private bool IsOnRestrictionsListForReset(string processName, string windowTitle)
+        {
+            // Use the same exclusion logic as AutoApplyService
+            var excludedProcessNames = new List<string>
+            {
+                "explorer",      // Windows Explorer
+                "dwm",          // Desktop Window Manager
+                "winlogon",     // Windows Logon
+                "csrss",        // Client/Server Runtime Subsystem
+                "seethroughwindows", // Our own application
+                "taskmgr",      // Task Manager
+                "lsass"         // Local Security Authority Subsystem Service
+            };
+
+            var excludedWindowTitles = new List<string>
+            {
+                "Program Manager",
+                "Desktop",
+                "",  // Empty titles
+                "Microsoft Text Input Application",
+                "Windows Security",
+                "User Account Control"
+            };
+
+            return excludedProcessNames.Contains(processName.ToLower()) ||
+                   excludedWindowTitles.Any(title =>
+                       string.IsNullOrEmpty(title) ? string.IsNullOrEmpty(windowTitle) :
+                       windowTitle.Contains(title, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public int ApplyTransparencyToAllVisibleWindows()
+        {
+            // Get eligible windows and capture their original state before applying transparency
+            var eligibleWindows = _autoApplyService.GetEligibleWindows();
+            var windowsToTrack = new List<(IntPtr Handle, string Title, WindowInfo WindowInfo)>();
+
+            // First, capture the original state of all eligible windows
+            foreach (var (handle, title) in eligibleWindows)
+            {
+                try
+                {
+                    if (!_hijackedWindows.ContainsKey(handle))
+                    {
+                        // Capture original window info before transparency is applied
+                        var windowInfo = _windowManager.HijackWindow(handle);
+                        windowsToTrack.Add((handle, title, windowInfo));
+                        Debug.WriteLine($"ApplicationService: Captured original state for window '{title}'");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ApplicationService: Failed to capture original state for window '{title}': {ex.Message}");
+                }
             }
 
+            // Apply transparency using the auto-apply service
             var appliedCount = _autoApplyService.ApplyTransparencyToVisibleWindows(
                 _currentSettings.SemiTransparentValue,
                 _currentSettings.ClickThrough,
                 _currentSettings.TopMost);
 
-            // Get the windows that were actually processed and add them to our tracking
-            var processedWindows = _autoApplyService.GetEligibleWindows();
+            // Now track the windows that had transparency applied
             int trackedCount = 0;
-
-            foreach (var (handle, title) in processedWindows)
+            foreach (var (handle, title, windowInfo) in windowsToTrack)
             {
-                if (!_hijackedWindows.ContainsKey(handle))
+                try
                 {
-                    try
-                    {
-                        // Create a basic window info for tracking
-                        // The transparency was already applied by the AutoApplyService
-                        var originalStyle = Win32Api.GetWindowLong(handle, Win32Api.GWL_EX_STYLE);
-                        var windowInfo = new WindowInfo(originalStyle, 255) // Assume it was originally opaque
-                        {
-                            CurrentAlpha = _currentSettings.SemiTransparentValue
-                        };
-                        _hijackedWindows[handle] = windowInfo;
-                        trackedCount++;
-                        Debug.WriteLine($"ApplicationService: Added window '{title}' to tracking");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"ApplicationService: Failed to track window {title}: {ex.Message}");
-                    }
+                    // Update the window info with current transparency state
+                    windowInfo.CurrentAlpha = _currentSettings.SemiTransparentValue;
+                    _hijackedWindows[handle] = windowInfo;
+                    trackedCount++;
+                    Debug.WriteLine($"ApplicationService: Added window '{title}' to tracking with proper original state");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ApplicationService: Failed to track window '{title}': {ex.Message}");
                 }
             }
 

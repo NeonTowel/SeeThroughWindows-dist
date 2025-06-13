@@ -62,6 +62,9 @@ namespace SeeThroughWindows
             ThemeManager.ApplyTheme(this);
             ThemeManager.ThemeChanged += OnThemeChanged;
 
+            // Ensure status bar elements have transparent backgrounds
+            EnsureStatusBarTransparency();
+
             // Set up custom status bar layout
             SetupStatusBarLayout();
 
@@ -279,6 +282,7 @@ namespace SeeThroughWindows
         {
             var hijackedWindowCount = _applicationService.GetHijackedWindowCount();
             restoreAllButton.Enabled = hijackedWindowCount > 0;
+            resetTransparencyGloballyButton.Enabled = true; // Always enabled as it checks all windows
         }
 
         /// <summary>
@@ -380,6 +384,9 @@ namespace SeeThroughWindows
 
             // Apply the current theme
             ThemeManager.ApplyTheme(this);
+
+            // Ensure status bar transparency
+            EnsureStatusBarTransparency();
 
             // Check for updates using the service
             try
@@ -579,6 +586,16 @@ namespace SeeThroughWindows
         }
 
         /// <summary>
+        /// Reset transparency globally for all non-opaque windows except those on restrictions list
+        /// </summary>
+        private void resetTransparencyGloballyButton_Click(object sender, EventArgs e)
+        {
+            // Call the new service method to reset transparency globally
+            _applicationService.ResetTransparencyGlobally();
+            UpdateUI();
+        }
+
+        /// <summary>
         /// Surf to the web site
         /// </summary>
         private void helpLink_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
@@ -705,12 +722,26 @@ namespace SeeThroughWindows
             // Apply theme to this form
             ThemeManager.ApplyTheme(this);
 
+            // Ensure status bar transparency is maintained
+            EnsureStatusBarTransparency();
+
             // Force a complete refresh of all controls, especially the trackbar
             this.Refresh();
 
             // Specifically refresh the transparency trackbar to ensure accent color updates
             transparencyTrackBar.Invalidate();
             transparencyTrackBar.Update();
+        }
+
+        /// <summary>
+        /// Ensure status bar elements have transparent backgrounds
+        /// </summary>
+        private void EnsureStatusBarTransparency()
+        {
+            // Force transparent backgrounds for status bar elements
+            helpLink.BackColor = Color.Transparent;
+            updateAvailableLink.BackColor = Color.Transparent;
+            pictureBox1.BackColor = Color.Transparent;
         }
 
         private class ThemeComboBoxItem
