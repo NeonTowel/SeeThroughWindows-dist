@@ -248,6 +248,7 @@ namespace SeeThroughWindows
       // Initialize the user hotkey with default values before using it
       this.userHotkey = new Hotkey(Keys.Z, false, false, false, false);
       this.userHotkey.Pressed += UserHotkey_Pressed;
+      this.userHotkey.Register(this); // Register the user hotkey so it works immediately
 
       // Set up the hotkeys
       maximizeHotkey.Pressed += MaximizeHotkey_Pressed;
