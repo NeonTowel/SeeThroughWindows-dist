@@ -1,18 +1,27 @@
 using SeeThroughWindows.Infrastructure;
 using SeeThroughWindows.Services;
+using System.Runtime.InteropServices;
 
 namespace SeeThroughWindows;
 
 static class Program
 {
+  [DllImport("kernel32.dll")]
+  static extern void AllocConsole();
+
   /// <summary>
   /// The main entry point for the application.
-  /// </summary>
-  [STAThread]
+  /// </summary>  [STAThread]
   static void Main()
   {
     try
     {
+      // Allocate console for debugging (only in debug builds)
+#if DEBUG
+      AllocConsole();
+      Console.WriteLine("SeeThroughWindows Debug Console Started");
+#endif
+
       // Make sure we have a single instance of this application running:
       bool ok;
       Mutex m = new Mutex(true, "MOBZystems.SeeThroughWindows", out ok);
@@ -53,19 +62,26 @@ static class Program
   /// Configure dependency injection services
   /// </summary>
   private static void ConfigureServices(ServiceContainer container)
-  {
-    // Register services
+  {    // Register services
     container.RegisterTransient<ISettingsManager, RegistrySettingsManager>();
     container.RegisterTransient<IWindowManager, WindowManager>();
     container.RegisterTransient<IHotkeyManager, HotkeyManager>();
     container.RegisterTransient<IUpdateChecker, GitHubUpdateChecker>();
+
+    // Register auto-apply service with factory
+    container.RegisterFactory<IAutoApplyService>(() =>
+    {
+      var windowManager = container.Resolve<IWindowManager>();
+      return new AutoApplyService(windowManager);
+    });
 
     // Register application service
     container.RegisterFactory<IApplicationService>(() =>
     {
       var windowManager = container.Resolve<IWindowManager>();
       var settingsManager = container.Resolve<ISettingsManager>();
-      return new ApplicationService(windowManager, settingsManager);
+      var autoApplyService = container.Resolve<IAutoApplyService>();
+      return new ApplicationService(windowManager, settingsManager, autoApplyService);
     });
 
     // Register main form

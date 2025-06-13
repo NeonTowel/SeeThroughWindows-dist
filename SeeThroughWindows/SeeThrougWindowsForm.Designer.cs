@@ -56,6 +56,7 @@ namespace SeeThroughWindows
       enableChangeTransparencyCheckbox = new CheckBox();
       topMostCheckBox = new CheckBox();
       clickThroughCheckBox = new CheckBox();
+      autoApplyOnStartupCheckBox = new CheckBox();
       groupBox2 = new GroupBox();
       sendToMonitorEnabledCheckBox = new CheckBox();
       minMaxEnabledCheckBox = new CheckBox();
@@ -314,6 +315,7 @@ namespace SeeThroughWindows
       groupBox1.Controls.Add(restoreAllButton);
       groupBox1.Controls.Add(enableChangeTransparencyCheckbox);
       groupBox1.Controls.Add(topMostCheckBox);
+      groupBox1.Controls.Add(autoApplyOnStartupCheckBox);
       groupBox1.Controls.Add(clickThroughCheckBox);
       groupBox1.Controls.Add(hotKeyComboBox);
       groupBox1.Controls.Add(shiftCheckBox);
@@ -331,7 +333,7 @@ namespace SeeThroughWindows
       groupBox1.Margin = new Padding(10);
       groupBox1.Name = "groupBox1";
       groupBox1.Padding = new Padding(2);
-      groupBox1.Size = new Size(580, 380);
+      groupBox1.Size = new Size(580, 405);
       groupBox1.TabIndex = 0;
       groupBox1.TabStop = false;
       groupBox1.Text = "Make window transparent";
@@ -350,7 +352,7 @@ namespace SeeThroughWindows
       // enableChangeTransparencyCheckbox
       //
       enableChangeTransparencyCheckbox.AutoSize = false;
-      enableChangeTransparencyCheckbox.Location = new Point(20, 330);
+      enableChangeTransparencyCheckbox.Location = new Point(20, 345);
       enableChangeTransparencyCheckbox.Margin = new Padding(6, 8, 6, 8);
       enableChangeTransparencyCheckbox.Name = "enableChangeTransparencyCheckbox";
       enableChangeTransparencyCheckbox.Size = new Size(550, 19);
@@ -384,12 +386,24 @@ namespace SeeThroughWindows
       clickThroughCheckBox.UseVisualStyleBackColor = true;
       clickThroughCheckBox.CheckedChanged += clickThroughCheckBox_CheckedChanged;
       //
+      // autoApplyOnStartupCheckBox
+      //
+      autoApplyOnStartupCheckBox.AutoSize = false;
+      autoApplyOnStartupCheckBox.Location = new Point(20, 320);
+      autoApplyOnStartupCheckBox.Margin = new Padding(6, 8, 6, 8);
+      autoApplyOnStartupCheckBox.Name = "autoApplyOnStartupCheckBox";
+      autoApplyOnStartupCheckBox.Size = new Size(550, 19);
+      autoApplyOnStartupCheckBox.TabIndex = 13;
+      autoApplyOnStartupCheckBox.Text = "&Auto-apply transparency to visible windows on startup";
+      autoApplyOnStartupCheckBox.UseVisualStyleBackColor = true;
+      autoApplyOnStartupCheckBox.CheckedChanged += autoApplyOnStartupCheckBox_CheckedChanged;
+      //
       // groupBox2
       //
       groupBox2.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
       groupBox2.Controls.Add(sendToMonitorEnabledCheckBox);
       groupBox2.Controls.Add(minMaxEnabledCheckBox);
-      groupBox2.Location = new Point(20, 420);
+      groupBox2.Location = new Point(20, 445);
       groupBox2.Margin = new Padding(10);
       groupBox2.Name = "groupBox2";
       groupBox2.Padding = new Padding(2);
@@ -554,6 +568,7 @@ namespace SeeThroughWindows
     private Label accentColorLabel;
     private ComboBox accentColorComboBox;
     private Label transparencyValueLabel;
+    private System.Windows.Forms.CheckBox autoApplyOnStartupCheckBox;
   }
 }
 

@@ -1,4 +1,5 @@
 using SeeThroughWindows.Models;
+using System.Diagnostics;
 
 namespace SeeThroughWindows.Services
 {
@@ -115,22 +116,48 @@ namespace SeeThroughWindows.Services
 
         public void RestoreWindow(IntPtr windowHandle, WindowInfo windowInfo)
         {
-            // Restore the original window style
-            uint currentStyle = Win32Api.GetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE);
-            uint restoredStyle = (currentStyle & ~NEW_STYLE_ALL) | (windowInfo.Style & NEW_STYLE_ALL);
-            Win32Api.SetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE, restoredStyle);
-
-            // Remove topmost style if not set in original style
-            if ((windowInfo.Style & Win32Api.WS_EX_TOPMOST) == 0)
+            try
             {
-                Win32Api.SetWindowPos(windowHandle, new IntPtr(Win32Api.HWND_NOTOPMOST), 0, 0, 0, 0,
-                    Win32Api.SWP_NOSIZE | Win32Api.SWP_NOMOVE);
+                // Restore the original window style
+                uint currentStyle = Win32Api.GetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE);
+                uint restoredStyle = (currentStyle & ~NEW_STYLE_ALL) | (windowInfo.Style & NEW_STYLE_ALL);
+                Win32Api.SetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE, restoredStyle);
+
+                // Remove topmost style if not set in original style
+                if ((windowInfo.Style & Win32Api.WS_EX_TOPMOST) == 0)
+                {
+                    Win32Api.SetWindowPos(windowHandle, new IntPtr(Win32Api.HWND_NOTOPMOST), 0, 0, 0, 0,
+                        Win32Api.SWP_NOSIZE | Win32Api.SWP_NOMOVE);
+                }
+
+                // Handle transparency restoration properly
+                if ((windowInfo.Style & Win32Api.WS_EX_LAYERED) != 0)
+                {
+                    // Window was originally layered - restore original transparency
+                    Win32Api.SetLayeredWindowAttributes(windowHandle, 0, windowInfo.OriginalAlpha, Win32Api.LWA_ALPHA);
+                }
+                else
+                {
+                    // Window was NOT originally layered - completely clear all layered attributes
+                    // This ensures the window is fully opaque and has no transparency artifacts
+
+                    // First, ensure the layered style is completely removed
+                    uint finalStyle = Win32Api.GetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE);
+                    finalStyle &= ~(uint)Win32Api.WS_EX_LAYERED;
+                    Win32Api.SetWindowLong(windowHandle, Win32Api.GWL_EX_STYLE, finalStyle);
+
+                    // Force a window redraw to ensure the transparency is completely cleared
+                    Win32Api.InvalidateRect(windowHandle, IntPtr.Zero, true);
+                }
+
+                // Update the window info to reflect restoration
+                windowInfo.CurrentAlpha = windowInfo.OriginalAlpha;
             }
-
-            // Restore original transparency if the window was originally layered
-            if ((windowInfo.Style & Win32Api.WS_EX_LAYERED) != 0)
+            catch (Exception ex)
             {
-                Win32Api.SetLayeredWindowAttributes(windowHandle, 0, windowInfo.OriginalAlpha, Win32Api.LWA_ALPHA);
+                // Log the error but don't throw - we want to continue restoring other windows
+                Debug.WriteLine($"WindowManager: Error restoring window {windowHandle}: {ex.Message}");
+                Console.WriteLine($"WindowManager: Error restoring window {windowHandle}: {ex.Message}");
             }
         }
 

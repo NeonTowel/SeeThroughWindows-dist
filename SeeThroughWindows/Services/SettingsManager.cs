@@ -95,6 +95,9 @@ namespace SeeThroughWindows.Services
                     settings.AccentColor = accent;
                 }
 
+                // Load auto-apply setting
+                settings.AutoApplyOnStartup = BoolFromString(root.GetValue("AutoApplyOnStartup", "0")?.ToString() ?? "0");
+
                 return settings;
             }
             catch
@@ -122,6 +125,8 @@ namespace SeeThroughWindows.Services
 
                 root.SetValue("Theme", settings.ThemeFlavor.ToString());
                 root.SetValue("AccentColor", settings.AccentColor.ToString());
+
+                root.SetValue("AutoApplyOnStartup", BoolToString(settings.AutoApplyOnStartup));
             }
             catch
             {
@@ -197,7 +202,8 @@ namespace SeeThroughWindows.Services
                 EnableUpDown = true,
                 EnablePageUpDown = true,
                 ThemeFlavor = CatppuccinTheme.Flavor.Mocha,
-                AccentColor = CatppuccinTheme.AccentColor.Lavender
+                AccentColor = CatppuccinTheme.AccentColor.Lavender,
+                AutoApplyOnStartup = false
             };
         }
 
@@ -220,6 +226,10 @@ namespace SeeThroughWindows.Services
         public bool EnablePageUpDown { get; set; } = true;
         public CatppuccinTheme.Flavor ThemeFlavor { get; set; } = CatppuccinTheme.Flavor.Mocha;
         public CatppuccinTheme.AccentColor AccentColor { get; set; } = CatppuccinTheme.AccentColor.Lavender;
+        /// <summary>
+        /// Whether to automatically apply transparency to visible windows on startup
+        /// </summary>
+        public bool AutoApplyOnStartup { get; set; } = false;
     }
 
     /// <summary>
