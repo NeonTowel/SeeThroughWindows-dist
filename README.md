@@ -34,22 +34,56 @@ The current release is [v1.0.9](https://github.com/NeonTowel/SeeThroughWindows-d
 
 ## Features
 
+### 🎨 Beautiful Catppuccin Theming
+
+- **Four stunning theme flavors**: Latte (light), Frappé, Macchiato, and Mocha (dark variants)
+- **10 customizable accent colors**: Lavender, Blue, Mauve, Pink, Teal, Green, Peach, Yellow, Red, and Sky
+- **Real-time theme switching**: Change themes and accent colors instantly without restarting
+- **Enhanced UI elements**: Custom-rendered checkboxes, track bars, and controls with improved visibility
+
+### 🚀 Advanced Window Management
+
 - **Global Hotkeys**: Configure custom hotkey combinations to toggle window transparency
+- **Auto-Apply on Startup**: Automatically apply transparency to all eligible windows when the application starts
+- **Global Reset Function**: Reset transparency for all non-opaque windows with a single button
 - **Multi-Monitor Support**: Move windows between monitors with hotkeys
-- **Window Management**: Minimize/maximize windows with hotkeys
+- **Transparency Levels**: Fine-tune transparency with increment/decrement hotkeys
 - **Click-Through Mode**: Make windows transparent to mouse clicks
-- **System Tray Integration**: Runs minimized in the system tray
+
+### 🔧 Enhanced System Integration
+
+- **Service-Based Architecture**: Modular design with dedicated services for window management, settings, and auto-apply functionality
+- **System Tray Integration**: Runs minimized in the system tray with comprehensive context menu
 - **Single Instance**: Prevents multiple instances from running simultaneously
+- **Persistent Settings**: All preferences including themes and hotkeys are saved between sessions
+
+### 🛠️ Developer Tools
+
+- **WindowDebugger**: Standalone debugging tool for window transparency management and testing
+- **Comprehensive Logging**: Enhanced debug output for troubleshooting window operations
+- **Modular Service Container**: Dependency injection pattern for better testability and maintainability
 
 ## Usage
 
 1. Run the application (it will appear in the system tray)
-2. Configure your preferred hotkey combination
-3. Press the hotkey while any window is active to toggle its transparency
-4. Use additional hotkeys for window management:
-   - `Ctrl+Win+Up/Down`: Maximize/minimize windows
-   - `Ctrl+Win+Left/Right`: Move windows between monitors
-   - `Ctrl+Win+PageUp/PageDown`: Adjust transparency levels
+2. Configure your preferred theme and accent color in the Appearance section
+3. Set up your hotkey combinations in the Hotkeys section
+4. Enable "Auto-Apply on Startup" if you want transparency applied automatically
+5. Press your configured hotkey while any window is active to toggle its transparency
+
+### Default Hotkeys
+
+- **Toggle Transparency**: `Ctrl+Win+T` (configurable)
+- **Maximize/Minimize**: `Ctrl+Win+Up/Down`
+- **Move Between Monitors**: `Ctrl+Win+Left/Right`
+- **Adjust Transparency**: `Ctrl+Win+PageUp/PageDown`
+
+### New Features in v1.0.9
+
+- **Auto-Apply on Startup**: Automatically make all eligible windows transparent when the app starts
+- **Global Reset**: Reset transparency for all windows with the "Reset Transparency Globally" button
+- **Enhanced Theming**: Beautiful Catppuccin themes with customizable accent colors
+- **Improved Service Architecture**: More reliable window management with better error handling
 
 ## System Requirements
 
@@ -132,8 +166,11 @@ dotnet restore
 # Build
 dotnet build
 
-# Run
+# Run main application
 dotnet run --project SeeThroughWindows
+
+# Run WindowDebugger tool
+dotnet run --project WindowDebugger
 
 # Publish self-contained
 dotnet publish SeeThroughWindows -c Release --self-contained true --runtime win-x64
@@ -146,68 +183,98 @@ dotnet publish SeeThroughWindows -c Release --self-contained false
 
 ```
 SeeThroughWindows/
-├── .github/                    # GitHub workflows and templates
+├── .cursorrules/                   # Cursor AI coding standards and guidelines
+├── .github/                        # GitHub workflows and templates
 │   └── workflows/
-│       └── release.yml         # Automated release workflow
-├── .vscode/                    # VS Code configuration
-│   ├── extensions.json         # Recommended extensions
-│   ├── launch.json            # Debug configuration
-│   ├── settings.json          # Workspace settings
-│   └── tasks.json             # Build tasks
-├── docs/                      # Documentation
-│   └── DEVELOPMENT.md         # Detailed development guide
-├── scripts/                   # Build and utility scripts
-│   └── build.ps1             # PowerShell build script
-├── SeeThroughWindows/         # Main application
-│   ├── Properties/            # Assembly info and resources
-│   ├── images/               # Application icons
-│   ├── Hotkey.cs             # Global hotkey management
-│   ├── Program.cs            # Application entry point
-│   ├── SeeThrougWindowsForm.cs # Main form logic
+│       ├── build-and-package.yml   # Build and packaging workflow
+│       └── ci.yml                  # Continuous integration workflow
+├── .vscode/                        # VS Code configuration
+│   ├── extensions.json             # Recommended extensions
+│   ├── launch.json                # Debug configuration
+│   ├── settings.json              # Workspace settings
+│   └── tasks.json                 # Build tasks
+├── docs/                          # Documentation
+│   └── DEVELOPMENT.md             # Detailed development guide
+├── scripts/                       # Build and utility scripts
+│   └── build.ps1                 # PowerShell build script
+├── SeeThroughWindows/             # Main application
+│   ├── Infrastructure/            # Dependency injection and service container
+│   ├── Models/                    # Data models and DTOs
+│   ├── Properties/                # Assembly info and resources
+│   ├── Services/                  # Business logic services
+│   │   ├── ApplicationService.cs  # Main application coordination
+│   │   ├── AutoApplyService.cs   # Auto-apply transparency functionality
+│   │   ├── HotkeyManager.cs      # Global hotkey management
+│   │   ├── SettingsManager.cs    # Settings persistence
+│   │   ├── UpdateChecker.cs      # Update checking service
+│   │   ├── Win32Api.cs           # Windows API wrappers
+│   │   └── WindowManager.cs      # Window manipulation service
+│   ├── Themes/                   # Catppuccin theme system
+│   │   ├── CatppuccinTheme.cs    # Theme definitions and color palettes
+│   │   └── ThemeManager.cs       # Theme application and management
+│   ├── images/                   # Application icons
+│   ├── Hotkey.cs                 # Global hotkey registration
+│   ├── Program.cs                # Application entry point
+│   ├── SeeThrougWindowsForm.cs   # Main form logic
 │   ├── SeeThrougWindowsForm.Designer.cs # Form designer code
-│   └── SeeThroughWindows.csproj # Project file
-├── SeeThroughWindowsSetup/    # Installer project
+│   └── SeeThroughWindows.csproj  # Project file
+├── WindowDebugger/               # Standalone debugging tool
+│   └── WindowDebugger.csproj    # Debug tool project file
+├── SeeThroughWindowsSetup/       # Installer project
 │   └── SeeThroughWindowsSetup.vdproj # Visual Studio installer project
-├── .editorconfig             # Code style configuration
-├── .gitignore               # Git ignore rules
-├── Directory.Build.props    # MSBuild properties
-├── global.json             # .NET SDK version requirements
-└── SeeThroughWindows.sln   # Solution file
+├── .editorconfig                # Code style configuration
+├── .gitignore                  # Git ignore rules
+├── CATPPUCCIN_THEME_README.md  # Detailed theming documentation
+├── REFACTORING_README.md       # Architecture and refactoring notes
+├── Directory.Build.props       # MSBuild properties
+├── global.json                # .NET SDK version requirements
+└── SeeThroughWindows.sln      # Solution file
 ```
 
 ### Architecture
 
-The application is built using:
+The application now features a modern service-based architecture:
+
+#### Core Technologies
 
 - **Windows Forms**: UI framework for the system tray and configuration
 - **Win32 APIs**: Window manipulation and global hotkey registration
-- **Registry**: Settings persistence
-- **Single Instance Pattern**: Prevents multiple instances using a named Mutex
+- **Service Container**: Dependency injection for modular design
+- **Registry**: Settings and theme persistence
 
-### Key Components
+#### Service Architecture
 
-- **Program.cs**: Application entry point with single-instance enforcement
-- **SeeThrougWindowsForm.cs**: Main form handling UI and window management logic
-- **Hotkey.cs**: Global hotkey registration and management using Win32 APIs
-- **System Tray Integration**: Minimizes to system tray for background operation
+- **ApplicationService**: Main coordination service for window transparency operations
+- **WindowManager**: Low-level window manipulation and Win32 API interactions
+- **SettingsManager**: Configuration persistence and retrieval
+- **AutoApplyService**: Automatic transparency application on startup
+- **HotkeyManager**: Global hotkey registration and management
+- **ThemeManager**: Catppuccin theme application and customization
+
+#### Key Components
+
+- **Program.cs**: Application entry point with service container initialization
+- **SeeThrougWindowsForm.cs**: Main UI with enhanced theming and new features
+- **CatppuccinTheme.cs**: Complete implementation of Catppuccin color system
+- **WindowDebugger**: Standalone tool for debugging window transparency issues
 
 ### Development Workflow
 
-1. **Code Style**: The project uses EditorConfig for consistent formatting
+1. **Code Style**: The project uses EditorConfig and Cursor AI coding standards for consistent formatting
 2. **Code Analysis**: .NET analyzers enabled for code quality
-3. **Debugging**: Full VS Code debugging support with breakpoints and watch variables
-4. **Testing**: Manual testing required (Windows Forms application)
+3. **Service-Based Testing**: Modular architecture allows for better unit testing
+4. **Theme Development**: Real-time theme switching for rapid UI development
+5. **Debugging**: Enhanced logging and dedicated WindowDebugger tool
 
-For detailed development information, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+### New in v1.0.9 Development Features
 
-### Release Process
-
-Releases are automated through GitHub Actions:
-
-- Push a tag like `v1.0.9` to trigger a release
-- Or manually trigger with workflow dispatch
-- Creates both framework-dependent and self-contained builds
-- Automatically generates changelog and uploads release assets
+- **Enhanced CI/CD**: Updated GitHub workflows for automated building and packaging
+- **Cursor AI Integration**: Comprehensive coding standards and guidelines in `.cursorrules/`
+- **Modular Architecture**: Service-based design with dependency injection
+- **Theme System**: Complete Catppuccin implementation with 4 flavors and 10 accent colors
+- **Auto-Apply Feature**: Background service for automatic transparency application
+- **Global Reset**: System-wide transparency reset functionality
+- **WindowDebugger Tool**: Standalone debugging utility for development and troubleshooting
 
 ## License
 
